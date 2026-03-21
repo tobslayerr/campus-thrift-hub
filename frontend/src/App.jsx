@@ -17,6 +17,7 @@ import ChatList from './pages/user/ChatList';
 import MyTransactions from './pages/user/MyTransactions';
 import HowItWorks from './pages/HowItWorks';
 import BannedPage from './pages/user/BannedPage';
+import Notifications from './pages/user/Notifications'; // <-- TAMBAHAN IMPORT
 
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
@@ -68,6 +69,7 @@ function App() {
             <Route path="/chats" element={<ProtectedRoute><ChatList /></ProtectedRoute>} />
             <Route path="/transactions" element={<ProtectedRoute><MyTransactions /></ProtectedRoute>} />
             <Route path="/edit-product/:id" element={<ProtectedRoute><UploadProduct /></ProtectedRoute>} />
+            <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} /> {/* <-- TAMBAHAN ROUTE */}
             
             <Route path="/portal-auth-admin-x7y9z-2026" element={<AdminLogin />} />
             <Route path="/admin" element={<ProtectedRoute requireAdmin={true}><AdminDashboard /></ProtectedRoute>} />

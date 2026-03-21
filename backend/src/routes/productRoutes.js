@@ -5,20 +5,24 @@ const {
     getProducts, 
     getProductById, 
     updateProduct, 
-    deleteProduct // <-- Tambahan Baru
+    deleteProduct 
 } = require('../controllers/productController');
+
 const { upload } = require('../middlewares/upload');
 const antiFraudFilter = require('../middlewares/antiFraud');
 const { protect } = require('../middlewares/authMiddleware');
 
+// ==========================================
+// DAFTAR ROUTES PRODUK
+// ==========================================
+
+// Route Publik
 router.get('/', getProducts);
 router.get('/:id', getProductById);
 
-// UBAH: upload.single('image') menjadi upload.array('images', 5)
+// Route Terproteksi
 router.post('/', protect, upload.array('images', 5), antiFraudFilter, createProduct);
 router.put('/:id', protect, upload.array('images', 5), antiFraudFilter, updateProduct);
-
-// TAMBAHKAN: Route Hapus Barang
 router.delete('/:id', protect, deleteProduct);
 
 module.exports = router;

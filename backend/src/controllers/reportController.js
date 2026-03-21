@@ -1,4 +1,5 @@
 const Report = require('../models/Report');
+const Notification = require('../models/Notification');
 const { uploadToCloudinary } = require('../middlewares/upload');
 
 exports.createReport = async (req, res) => {
@@ -42,6 +43,28 @@ exports.updateReportStatus = async (req, res) => {
         
         const { status, adminNotes } = req.body;
         const report = await Report.findByIdAndUpdate(req.params.id, { status, adminNotes }, { new: true });
+        
+        // 🔥 LOGIKA NOTIFIKASI STATUS LAPORAN 🔥
+        let notifTitle = '';
+        let notifMessage = '';
+
+        if (status === 'Sedang Diproses') {
+            notifTitle = 'Laporan Diproses 🔍';
+            notifMessage = `Laporan Anda terkait "${report.title}" sedang ditinjau dan ditindaklanjuti oleh tim Admin.`;
+        } else if (status === 'Selesai') {
+            notifTitle = 'Laporan Selesai Ditangani 🏁';
+            notifMessage = `Laporan Anda telah selesai diproses. Catatan Admin: "${adminNotes || 'Terima kasih telah melapor.'}"`;
+        }
+
+        // Jika ada perubahan status yang penting, kirim notifikasi ke HP pelapor
+        if (notifTitle) {
+            await Notification.create({
+                userId: report.reporterId,
+                title: notifTitle,
+                message: notifMessage,
+                type: 'REPORT'
+            });
+        }
         
         res.status(200).json({ success: true, data: report, message: 'Status laporan diperbarui.' });
     } catch (error) {

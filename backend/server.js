@@ -12,6 +12,7 @@ const messageRoutes = require('./src/routes/messageRoutes');
 const reviewRoutes = require('./src/routes/reviewRoutes');
 const paymentMethodRoutes = require('./src/routes/paymentMethodRoutes');
 const reportRoutes = require('./src/routes/reportRoutes'); // 👈 TAMBAHAN BARU
+const notificationRoutes = require('./src/routes/notificationRoutes');
 
 // Inisialisasi Express
 const app = express();
@@ -34,6 +35,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/payment-methods', paymentMethodRoutes);
 app.use('/api/reports', reportRoutes); // 👈 TAMBAHAN BARU
 app.use('/api/categories', require('./src/routes/categoryRoutes'));
+app.use('/api/notifications', notificationRoutes);
 
 // Route Default / Home
 app.get('/', (req, res) => {
