@@ -90,7 +90,7 @@ export default function ChatRoom() {
         const phoneRegex = /(?:\+\s*62|62|0)[\s\-.]*8[0-9]{1,2}[\s\-.]?[0-9]{3,4}[\s\-.]?[0-9]{3,4}/g;
         
         // Deteksi Dua Faktor (Bank + Angka)
-        const hasFiveDigits = /(\d[\s\-\.,]*){5,}/.test(t);
+        const hasFiveDigits = /(\d[\s\-\\.,]*){5,}/.test(t);
         const hasBankKeyword = /\b(rek|rekening|norek|bca|bni|bri|mandiri|bsi|cimb|danamon|permata|mega|bjb|gopay|gpay|dana|ovo|shopeepay|spay|linkaja)\b/i.test(t);
 
         if (hasBankKeyword && hasFiveDigits) return true;
@@ -224,7 +224,7 @@ export default function ChatRoom() {
                         const isReadStatus = msg.isRead;
 
                         return (
-                            // eslint-disable-next-line react-hooks/purity
+                             
                             <div key={msg._id || Math.random()} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[80%] md:max-w-[70%] px-5 py-3 text-[15px] leading-relaxed shadow-sm relative ${isMe ? 'bg-[#00478F] text-white rounded-[1.5rem] rounded-tr-sm' : 'bg-white border border-slate-100 text-slate-800 rounded-[1.5rem] rounded-tl-sm'}`}>
                                     
