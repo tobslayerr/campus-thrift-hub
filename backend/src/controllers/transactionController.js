@@ -24,17 +24,8 @@ exports.checkout = async (req, res) => {
 
         const proofUrl = await uploadToCloudinary(req.file.buffer, 'proofs');
         
-        // ==========================================
-        // 🧮 LOGIKA SISTEM FEE DINAMIS
-        // ==========================================
-        let adminFee = 0;
-        if (product.price <= 100000) {
-            adminFee = product.price * 0.05; // Potongan 5% jika harga <= 100rb
-        } else {
-            adminFee = product.price * 0.10; // Potongan 10% jika harga > 100rb
-        }
-        
-        const sellerIncome = product.price - adminFee; // Uang bersih untuk penjual
+        let adminFee = product.price <= 100000 ? product.price * 0.05 : product.price * 0.10;
+        const sellerIncome = product.price - adminFee; 
         const codPin = Math.floor(1000 + Math.random() * 9000).toString();
 
         const transaction = await Transaction.create({
@@ -46,36 +37,18 @@ exports.checkout = async (req, res) => {
             sellerIncome: sellerIncome,
             codPin,
             proofOfPayment: proofUrl,
-            paymentMethod: paymentMethod || 'Transfer Bank (Default)' 
+            paymentMethod: paymentMethod || 'Transfer Bank' 
         });
 
         product.stock -= 1;
-        if (product.stock === 0) {
-            product.status = 'Menunggu Pembayaran';
-        } else {
-            product.status = 'Tersedia'; 
-        }
+        product.status = product.stock === 0 ? 'Menunggu Pembayaran' : 'Tersedia';
         await product.save();
 
-        // 🔔 NOTIFIKASI CHECKOUT
-        await Notification.create({
-            userId: buyerId,
-            title: 'Pesanan Dibuat! 🛒',
-            message: `Checkout untuk "${product.title}" berhasil. Silakan tunggu Admin memverifikasi pembayaran Anda.`,
-            type: 'TRANSACTION'
-        });
-
-        await Notification.create({
-            userId: product.sellerId,
-            title: 'Pesanan Baru Masuk! 📦',
-            message: `Barang Anda "${product.title}" telah dipesan. Menunggu Admin memverifikasi pembayaran pembeli.`,
-            type: 'TRANSACTION'
-        });
+        await Notification.create({ userId: buyerId, title: 'Pesanan Dibuat! 🛒', message: `Checkout untuk "${product.title}" berhasil. Menunggu verifikasi admin.`, type: 'TRANSACTION' });
+        await Notification.create({ userId: product.sellerId, title: 'Pesanan Baru Masuk! 📦', message: `Barang Anda "${product.title}" telah dipesan.`, type: 'TRANSACTION' });
 
         res.status(201).json({ success: true, transaction, message: 'Checkout berhasil, menunggu admin.' });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
 };
 
 exports.updateStatus = async (req, res) => {
@@ -145,8 +118,7 @@ exports.getAllTransactions = async (req, res) => {
         
         const transactions = await Transaction.find()
             .populate('productId', 'title price images imageUrl')
-            .populate('buyerId', 'name email')
-            // 👇 TAMBAHKAN bankAccountName DI BAWAH INI
+            .populate('buyerId', 'name email bankName bankAccount bankAccountName') 
             .populate('sellerId', 'name bankName bankAccount bankAccountName qrisUrl') 
             .sort({ createdAt: -1 });
 
@@ -157,7 +129,7 @@ exports.getAllTransactions = async (req, res) => {
 };
 
 // ========================================================
-// FUNGSI INI YANG DIPERBAIKI UNTUK MENCEGAH ULASAN GANDA
+// FUNGSI MENCEGAH ULASAN GANDA & TAMPILAN TRANSAKSI USER
 // ========================================================
 exports.getMyTransactions = async (req, res) => {
     try {
@@ -167,7 +139,7 @@ exports.getMyTransactions = async (req, res) => {
             .populate('productId', 'title imageUrl images price') 
             .populate('sellerId', 'name campus profilePicture')
             .sort({ createdAt: -1 })
-            .lean(); // Wajib pakai lean agar bisa kita modifikasi datanya
+            .lean(); // Wajib pakai lean agar bisa dimodifikasi datanya
 
         let sales = await Transaction.find({ sellerId: userId })
             .populate('productId', 'title imageUrl images price')
@@ -177,19 +149,15 @@ exports.getMyTransactions = async (req, res) => {
 
         // Proses menggabungkan data Ulasan ke dalam array Pembelian
         for (let i = 0; i < purchases.length; i++) {
-            // 1. Coba cari ulasan dengan sistem baru (berdasarkan ID Transaksi)
             let review = await Review.findOne({ transactionId: purchases[i]._id }).populate('buyerId', 'name profilePicture');
             
-            // 2. BACKWARD COMPATIBILITY: 
-            // Jika tidak ketemu (karena ini ulasan lama), cari berdasarkan ID Produk dan Pembeli
+            // BACKWARD COMPATIBILITY
             if (!review && purchases[i].productId) {
                 review = await Review.findOne({ 
                     productId: purchases[i].productId._id, 
                     buyerId: userId 
                 }).populate('buyerId', 'name profilePicture');
             }
-
-            // Tempelkan ulasan ke objek transaksi
             purchases[i].review = review || null; 
         }
 
@@ -226,7 +194,7 @@ exports.verifyCodPin = async (req, res) => {
         
         await Product.findByIdAndUpdate(transaction.productId, { 
             status: 'Terjual',
-            stock: 0 // Pastikan stok nol
+            stock: 0 
         });
         const product = await Product.findByIdAndUpdate(transaction.productId, { status: 'Selesai' });
         const productTitle = product ? product.title : 'Barang';
@@ -287,4 +255,75 @@ exports.disburseFunds = async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
+};
+
+// ==========================================
+// 🔄 FUNGSI SISTEM REFUND (3 TAHAP)
+// ==========================================
+
+// 1. Pembeli Mengajukan Refund
+exports.requestRefund = async (req, res) => {
+    try {
+        const { title, reason } = req.body;
+        const transaction = await Transaction.findById(req.params.id).populate('productId');
+        
+        if (!transaction) return res.status(404).json({ message: 'Transaksi tidak ditemukan.' });
+        if (transaction.buyerId.toString() !== req.user.id) return res.status(403).json({ message: 'Akses Ditolak.' });
+        if (['Selesai', 'Dana Dicairkan', 'Refund Diajukan', 'Refund Diproses', 'Refund Selesai'].includes(transaction.status)) {
+            return res.status(400).json({ message: 'Status transaksi tidak mendukung pembatalan.' });
+        }
+
+        transaction.status = 'Refund Diajukan';
+        transaction.cancelTitle = title;
+        transaction.cancelReason = reason;
+        await transaction.save();
+
+        await Notification.create({ userId: transaction.buyerId, title: 'Pengajuan Refund 🔄', message: `Permintaan batal untuk "${transaction.productId.title}" sedang ditinjau Admin.`, type: 'SYSTEM' });
+        await Notification.create({ userId: transaction.sellerId, title: 'Pesanan Dibatalkan ❌', message: `Pembeli membatalkan pesanan "${transaction.productId.title}". Alasan: ${title}`, type: 'SYSTEM' });
+
+        res.status(200).json({ success: true, message: 'Pengajuan refund berhasil dikirim ke Admin.' });
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+};
+
+// 2. Admin Memproses Refund
+exports.processRefund = async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak.' });
+        const transaction = await Transaction.findById(req.params.id).populate('productId');
+        
+        if (!transaction) return res.status(404).json({ message: 'Transaksi tidak ditemukan.' });
+
+        transaction.status = 'Refund Diproses';
+        await transaction.save();
+
+        await Notification.create({ userId: transaction.buyerId, title: 'Refund Diproses ⏳', message: `Admin sedang memproses pengembalian dana 100% untuk "${transaction.productId.title}" ke rekening Anda.`, type: 'SYSTEM' });
+
+        res.status(200).json({ success: true, message: 'Status diubah ke Refund Diproses' });
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+};
+
+// 3. Admin Selesai Mentransfer Refund & Kembalikan Stok
+exports.completeRefund = async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak.' });
+        const transaction = await Transaction.findById(req.params.id).populate('productId');
+        
+        if (!transaction) return res.status(404).json({ message: 'Transaksi tidak ditemukan.' });
+
+        transaction.status = 'Refund Selesai';
+        await transaction.save();
+
+        // Kembalikan Stok Barang (+1) jika barang masih ada
+        const product = await Product.findById(transaction.productId._id);
+        if (product) {
+            product.stock += 1;
+            product.status = 'Tersedia';
+            await product.save();
+        }
+
+        await Notification.create({ userId: transaction.buyerId, title: 'Refund Berhasil Dicairkan 💸', message: `Dana sebesar Rp${transaction.price.toLocaleString('id-ID')} telah ditransfer kembali ke rekening Anda.`, type: 'SYSTEM' });
+        await Notification.create({ userId: transaction.sellerId, title: 'Stok Dikembalikan 📦', message: `Barang "${transaction.productId.title}" telah kembali tersedia di etalase toko Anda karena pesanan dibatalkan.`, type: 'SYSTEM' });
+
+        res.status(200).json({ success: true, message: 'Refund selesai dan stok dikembalikan.' });
+    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
 };

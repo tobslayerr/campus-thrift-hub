@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
@@ -6,7 +7,7 @@ import {
     ClipboardList, Clock, ShieldCheck, 
     Landmark, CheckCircle, MessageSquare, 
     AlertTriangle, Lock, KeyRound, ArrowRight, User,
-    Star, ImagePlus, X, Flag
+    Star, ImagePlus, X, RotateCcw
 } from 'lucide-react';
 
 export default function MyTransactions() {
@@ -26,7 +27,7 @@ export default function MyTransactions() {
     const [submittingReview, setSubmittingReview] = useState(false);
 
     // ==========================================
-    // STATE SISTEM LAPORAN
+    // STATE SISTEM LAPORAN PENGGUNA
     // ==========================================
     const [showReportModal, setShowReportModal] = useState(false);
     const [reportForm, setReportForm] = useState({ 
@@ -38,6 +39,14 @@ export default function MyTransactions() {
     });
     const [reportPreview, setReportPreview] = useState(null);
     const [submittingReport, setSubmittingReport] = useState(false);
+
+    // ==========================================
+    // STATE SISTEM PENGAJUAN REFUND
+    // ==========================================
+    const [showRefundModal, setShowRefundModal] = useState(false);
+    const [refundingTrxId, setRefundingTrxId] = useState(null);
+    const [refundForm, setRefundForm] = useState({ title: '', reason: '' });
+    const [submittingRefund, setSubmittingRefund] = useState(false);
 
     const fetchTransactions = async () => {
         try {
@@ -139,7 +148,7 @@ export default function MyTransactions() {
     };
 
     // ==========================================
-    // SUBMIT LAPORAN (REPORT)
+    // SUBMIT LAPORAN PENGGUNA
     // ==========================================
     const handleSubmitReport = async (e) => {
         e.preventDefault();
@@ -172,10 +181,35 @@ export default function MyTransactions() {
     };
 
     // ==========================================
+    // SUBMIT PENGAJUAN REFUND
+    // ==========================================
+    const handleSubmitRefund = async (e) => {
+        e.preventDefault();
+        if (!refundForm.title || !refundForm.reason) return toast.error("Harap isi semua kolom!");
+
+        setSubmittingRefund(true);
+        const toastId = toast.loading("Mengajukan refund...");
+
+        try {
+            await api.post(`/transactions/${refundingTrxId}/refund`, {
+                title: refundForm.title,
+                reason: refundForm.reason
+            });
+            toast.success("Pengajuan refund berhasil dikirim. Menunggu proses Admin.", { id: toastId });
+            setShowRefundModal(false);
+            setRefundForm({ title: '', reason: '' });
+            fetchTransactions(); // Refresh data
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Gagal mengajukan refund", { id: toastId });
+        } finally {
+            setSubmittingRefund(false);
+        }
+    };
+
+    // ==========================================
     // BADGE STATUS (DENGAN MASKING PEMBELI)
     // ==========================================
     const getStatusBadge = (status, tab) => {
-        // 💡 LOGIKA MASKING: Jika tab pembelian dan status "Dana Dicairkan", tampilkan sebagai "Selesai" saja.
         const displayStatus = (tab === 'pembelian' && status === 'Dana Dicairkan') ? 'Selesai' : status;
 
         switch (displayStatus) {
@@ -184,6 +218,12 @@ export default function MyTransactions() {
             case 'Selesai': return <span className="flex items-center gap-1.5 bg-purple-50 text-purple-600 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-purple-200"><Landmark size={14} /> Selesai</span>;
             case 'Dana Dicairkan': return <span className="flex items-center gap-1.5 bg-green-50 text-green-600 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-green-200"><CheckCircle size={14} /> Dana Cair</span>;
             case 'Sengketa': return <span className="flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-red-200"><AlertTriangle size={14} /> Sengketa</span>;
+            
+            // STATUS REFUND
+            case 'Refund Diajukan': return <span className="flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-red-200"><AlertTriangle size={14} /> Refund Diajukan</span>;
+            case 'Refund Diproses': return <span className="flex items-center gap-1.5 bg-orange-50 text-[#FF9500] px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-orange-200"><RotateCcw size={14} className="animate-spin-slow" /> Refund Diproses</span>;
+            case 'Refund Selesai': return <span className="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-slate-300"><RotateCcw size={14} /> Dikembalikan</span>;
+            
             default: return <span className="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-slate-200"><Clock size={14} /> Diproses</span>;
         }
     };
@@ -223,7 +263,7 @@ export default function MyTransactions() {
                         <ClipboardList size={32} className="text-slate-300" />
                     </div>
                     <p className="text-slate-800 font-black text-xl tracking-tight mb-2">Belum ada transaksi di tab ini.</p>
-                    <Link to="/" className="inline-flex items-center gap-2 text-[#FF9500] font-bold hover:text-[#00478F] transition-colors mt-2">
+                    <Link to="/explore" className="inline-flex items-center gap-2 text-[#FF9500] font-bold hover:text-[#00478F] transition-colors mt-2">
                         Mulai berburu barang thrift <ArrowRight size={16} />
                     </Link>
                 </div>
@@ -254,7 +294,7 @@ export default function MyTransactions() {
                                                 <img src={(productData.images && productData.images.length > 0) ? productData.images[0] : (productData.imageUrl || 'https://via.placeholder.com/150')} alt="produk" className="w-full h-full object-cover" />
                                             </div>
                                             <div className="w-full">
-                                                <h3 className="font-black text-slate-900 text-lg line-clamp-2 leading-tight hover:text-[#00478F] transition-colors cursor-pointer">{productData.title || 'Produk Dihapus'}</h3>
+                                                <h3 className="font-black text-slate-900 text-lg line-clamp-2 leading-tight hover:text-[#00478F] transition-colors cursor-pointer" onClick={() => navigate(`/product/${productData._id}`)}>{productData.title || 'Produk Dihapus'}</h3>
                                                 
                                                 {/* LOGIKA TAMPILAN HARGA BERDASARKAN ROLE */}
                                                 {activeTab === 'penjualan' ? (
@@ -314,22 +354,51 @@ export default function MyTransactions() {
                                         </div>
                                     </div>
 
-                                    {/* 1. PEMBELI: LIHAT PIN RAHASIA */}
-                                    {activeTab === 'pembelian' && trx.status === 'Dana Ditahan (Siap COD)' && (
-                                        <div className="mt-6 p-6 bg-[#00478F] rounded-2xl flex flex-col md:flex-row items-center justify-between text-white shadow-xl shadow-blue-900/10 gap-6 relative overflow-hidden">
-                                            <div className="absolute -right-10 -top-10 text-white/5"><Lock size={150} /></div>
-                                            <div className="relative z-10 flex items-center gap-4">
-                                                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center"><KeyRound size={24} className="text-[#FF9500]" /></div>
-                                                <div>
-                                                    <p className="text-xs text-blue-200 font-black uppercase tracking-widest mb-1">PIN Rahasia COD</p>
-                                                    <p className="text-sm font-medium opacity-90">Berikan ke penjual <strong className="text-[#FF9500]">HANYA</strong> jika barang sudah diterima.</p>
+                                    {/* 1. PEMBELI: LIHAT PIN RAHASIA & TOMBOL REFUND */}
+                                    {activeTab === 'pembelian' && (trx.status === 'Menunggu Verifikasi' || trx.status === 'Dana Ditahan (Siap COD)') && (
+                                        <div className="mt-6 border-t border-slate-100 pt-6">
+                                            {trx.status === 'Dana Ditahan (Siap COD)' && (
+                                                <div className="p-6 bg-[#00478F] rounded-2xl flex flex-col md:flex-row items-center justify-between text-white shadow-xl shadow-blue-900/10 gap-6 relative overflow-hidden mb-4">
+                                                    <div className="absolute -right-10 -top-10 text-white/5"><Lock size={150} /></div>
+                                                    <div className="relative z-10 flex items-center gap-4">
+                                                        <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center"><KeyRound size={24} className="text-[#FF9500]" /></div>
+                                                        <div>
+                                                            <p className="text-xs text-blue-200 font-black uppercase tracking-widest mb-1">PIN Rahasia COD</p>
+                                                            <p className="text-sm font-medium opacity-90">Berikan ke penjual <strong className="text-[#FF9500]">HANYA</strong> jika barang sudah diterima.</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="relative z-10 bg-white text-[#00478F] px-8 py-3 rounded-xl font-black text-3xl tracking-[0.4em] shadow-inner border-2 border-[#FF9500]">{trx.codPin}</div>
                                                 </div>
+                                            )}
+
+                                            {/* TOMBOL BATALKAN & AJUKAN REFUND */}
+                                            <div className="flex justify-end">
+                                                <button 
+                                                    onClick={() => { setRefundingTrxId(trx._id); setShowRefundModal(true); }} 
+                                                    className="px-6 py-3 bg-red-50 text-red-600 font-black uppercase text-[10px] tracking-widest rounded-xl hover:bg-red-500 hover:text-white transition-colors border border-red-100 flex items-center gap-2"
+                                                >
+                                                    <RotateCcw size={16} /> Batalkan Pesanan & Ajukan Refund
+                                                </button>
                                             </div>
-                                            <div className="relative z-10 bg-white text-[#00478F] px-8 py-3 rounded-xl font-black text-3xl tracking-[0.4em] shadow-inner border-2 border-[#FF9500]">{trx.codPin}</div>
                                         </div>
                                     )}
 
-                                    {/* 2. PEMBELI: FORM BERI ULASAN ATAU TAMPILKAN HISTORY ULASAN */}
+                                    {/* 2. PEMBELI: TAMPILAN STATUS REFUND */}
+                                    {activeTab === 'pembelian' && ['Refund Diajukan', 'Refund Diproses', 'Refund Selesai'].includes(trx.status) && (
+                                        <div className="mt-6 p-5 bg-red-50 border border-red-100 rounded-2xl">
+                                            <h4 className="font-black text-red-600 mb-2 flex items-center gap-2"><RotateCcw size={16}/> Informasi Pengembalian Dana</h4>
+                                            <p className="text-sm font-bold text-slate-800 mb-1">Alasan Batal: <span className="font-medium text-slate-600">{trx.cancelTitle}</span></p>
+                                            <p className="text-xs text-slate-500 italic">"{trx.cancelReason}"</p>
+                                            
+                                            {trx.status === 'Refund Selesai' && (
+                                                <div className="mt-4 pt-3 border-t border-red-200/50">
+                                                    <p className="text-xs font-black text-green-600">✅ Dana 100% sebesar Rp{trx.price.toLocaleString('id-ID')} telah ditransfer ke rekening Anda.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* 3. PEMBELI: FORM BERI ULASAN ATAU TAMPILKAN HISTORY ULASAN */}
                                     {activeTab === 'pembelian' && (trx.status === 'Selesai' || trx.status === 'Dana Dicairkan') && (
                                         <div className="mt-6 border-t border-slate-100 pt-6">
                                             {trx.review ? (
@@ -412,7 +481,7 @@ export default function MyTransactions() {
                                         </div>
                                     )}
 
-                                    {/* 3. PENJUAL: INPUT PIN PEMBELI */}
+                                    {/* 4. PENJUAL: INPUT PIN PEMBELI */}
                                     {activeTab === 'penjualan' && trx.status === 'Dana Ditahan (Siap COD)' && (
                                         <div className="mt-6 p-6 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6">
                                             <div className="flex items-start gap-4 flex-1">
@@ -441,18 +510,32 @@ export default function MyTransactions() {
                                         </div>
                                     )}
 
-                                    {/* 4. PENJUAL: MENUNGGU TRANSFER ADMIN */}
+                                    {/* 5. PENJUAL: TAMPILAN STATUS REFUND */}
+                                    {activeTab === 'penjualan' && ['Refund Diajukan', 'Refund Diproses', 'Refund Selesai'].includes(trx.status) && (
+                                        <div className="mt-6 p-5 bg-red-50 border border-red-100 rounded-2xl">
+                                            <h4 className="font-black text-red-600 mb-2 flex items-center gap-2"><AlertTriangle size={16}/> Pesanan Dibatalkan Pembeli</h4>
+                                            <p className="text-sm font-bold text-slate-800 mb-1">Alasan: <span className="font-medium text-slate-600">{trx.cancelTitle}</span></p>
+                                            <p className="text-xs text-slate-500 italic">"{trx.cancelReason}"</p>
+                                            {trx.status === 'Refund Selesai' && (
+                                                <div className="mt-3 pt-3 border-t border-red-200/50">
+                                                    <p className="text-xs font-black text-green-600">📦 Stok barang telah dikembalikan ke etalase toko Anda.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* 6. PENJUAL: MENUNGGU TRANSFER ADMIN */}
                                     {trx.status === 'Selesai' && activeTab === 'penjualan' && (
                                         <div className="mt-6 p-5 bg-purple-50 border border-purple-100 rounded-2xl flex items-center gap-4">
                                             <div className="w-10 h-10 bg-purple-200 text-purple-700 rounded-full flex items-center justify-center shrink-0"><Landmark size={20} /></div>
                                             <div>
                                                 <p className="text-sm font-black text-purple-900">COD Berhasil! Menunggu Transfer Admin</p>
-                                                <p className="text-xs text-purple-700 mt-1 font-medium leading-relaxed">Dana <strong>Rp{(trx.sellerIncome || priceToDisplay).toLocaleString('id-ID')}</strong> akan ditransfer ke rekening Anda dalam waktu maksimal 1x24 jam kerja.</p>
+                                                <p className="text-xs text-purple-700 mt-1 font-medium leading-relaxed">Dana bersih <strong>Rp{(trx.sellerIncome || priceToDisplay).toLocaleString('id-ID')}</strong> akan ditransfer ke rekening Anda dalam waktu maksimal 1x24 jam kerja.</p>
                                             </div>
                                         </div>
                                     )}
 
-                                    {/* 5. PENJUAL: DANA SUDAH CAIR */}
+                                    {/* 7. PENJUAL: DANA SUDAH CAIR */}
                                     {trx.status === 'Dana Dicairkan' && activeTab === 'penjualan' && (
                                         <div className="mt-6 p-5 bg-green-50 border border-green-100 rounded-2xl flex items-center gap-4">
                                             <div className="w-10 h-10 bg-green-200 text-green-700 rounded-full flex items-center justify-center shrink-0"><CheckCircle size={20} /></div>
@@ -517,6 +600,44 @@ export default function MyTransactions() {
 
                             <button type="submit" disabled={submittingReport} className="w-full py-4 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 uppercase tracking-widest text-xs shadow-lg shadow-red-500/30 transition-all mt-4 disabled:opacity-50">
                                 {submittingReport ? 'Mengirim Laporan...' : 'Kirim Laporan'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ========================================================= */}
+            {/* MODAL: PENGAJUAN REFUND */}
+            {/* ========================================================= */}
+            {showRefundModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-red-600 flex items-center gap-2"><RotateCcw size={24}/> Ajukan Refund 100%</h2>
+                            <button onClick={() => setShowRefundModal(false)} className="text-slate-400 hover:bg-slate-100 p-2 rounded-full"><X size={20}/></button>
+                        </div>
+                        
+                        <p className="text-sm text-slate-500 font-medium mb-6">Pastikan profil Anda sudah diisi dengan nomor Rekening/E-Wallet yang valid untuk menerima pengembalian dana.</p>
+
+                        <form onSubmit={handleSubmitRefund} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Alasan Pembatalan</label>
+                                <select required value={refundForm.title} onChange={(e) => setRefundForm({...refundForm, title: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:border-[#00478F] outline-none">
+                                    <option value="" disabled>Pilih Alasan...</option>
+                                    <option value="Berubah Pikiran / Batal Beli">Berubah Pikiran / Batal Beli</option>
+                                    <option value="Penjual Tidak Merespons">Penjual Tidak Merespons (Ghosting)</option>
+                                    <option value="Barang Tidak Sesuai Saat COD">Barang Tidak Sesuai Saat COD</option>
+                                    <option value="Lainnya">Lainnya</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Detail Alasan</label>
+                                <textarea required value={refundForm.reason} onChange={(e) => setRefundForm({...refundForm, reason: e.target.value})} placeholder="Jelaskan alasan batal Anda secara singkat..." className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:border-[#00478F] outline-none min-h-[100px]"></textarea>
+                            </div>
+
+                            <button type="submit" disabled={submittingRefund} className="w-full py-4 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 uppercase tracking-widest text-xs shadow-lg shadow-red-500/30 transition-all mt-4 disabled:opacity-50">
+                                {submittingRefund ? 'Mengajukan...' : 'Kirim Pengajuan Refund'}
                             </button>
                         </form>
                     </div>

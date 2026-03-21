@@ -10,7 +10,7 @@ import {
     Tags, Plus, Trash2, LayoutDashboard, Edit2, X, Check, 
     ArrowLeftRight,
     AlertCircle, ShieldCheck, CreditCard, Building, ImagePlus, QrCode,
-    Users, Flag, ShieldBan, Menu, LogOut, ChevronLeft, ChevronRight, Eye, User, ImageIcon, HelpCircle, Loader2
+    Users, Flag, ShieldBan, Menu, LogOut, ChevronLeft, ChevronRight, Eye, User, ImageIcon, HelpCircle, Loader2, RotateCcw, AlertTriangle
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -75,7 +75,7 @@ export default function Dashboard() {
     useEffect(() => {
         setLoading(true);
         if (activeTab === 'kategori') fetchCategories();
-        if (activeTab === 'transaksi') fetchTransactions();
+        if (activeTab === 'transaksi' || activeTab === 'refund') fetchTransactions();
         if (activeTab === 'rekening') fetchPaymentMethods();
         if (activeTab === 'pengguna') fetchUsers();
         if (activeTab === 'laporan') fetchReports();
@@ -265,6 +265,7 @@ export default function Dashboard() {
                 <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto font-sans">
                     {[
                         { id: 'transaksi', icon: ArrowLeftRight, label: 'Transaksi' },
+                        { id: 'refund', icon: RotateCcw, label: 'Pengajuan Refund' }, // <--- TAMBAHAN TAB REFUND
                         { id: 'pengguna', icon: Users, label: 'Manajemen Pengguna' },
                         { id: 'laporan', icon: Flag, label: 'Laporan & Sengketa' },
                         { id: 'rekening', icon: CreditCard, label: 'Rekening Escrow' },
@@ -324,7 +325,9 @@ export default function Dashboard() {
                                             <div className="grid gap-6">
                                                 {displayedTransactions.map((trx) => {
                                                     const isQRISMethod = trx.paymentMethod?.toLowerCase().includes('qris');
-                                                    
+                                                    // Sembunyikan transaksi yang masuk kategori Refund agar tidak double
+                                                    if (['Refund Diajukan', 'Refund Diproses', 'Refund Selesai', 'Dibatalkan'].includes(trx.status)) return null;
+
                                                     return (
                                                         <div key={trx._id} className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.02)] flex flex-col lg:flex-row lg:items-start justify-between gap-8 hover:border-[#00478F]/30 transition-all group">
                                                             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -419,6 +422,88 @@ export default function Dashboard() {
                                             <Pagination totalItems={statusFilter === 'Semua' ? transactions.length : transactions.filter(t => t.status === statusFilter).length} />
                                         </>
                                     )}
+                                </div>
+                            )}
+
+                            {/* TAB REFUND (BARU DITAMBAHKAN) */}
+                            {activeTab === 'refund' && (
+                                <div className="space-y-6 animate-in fade-in duration-500">
+                                    <div className="flex flex-wrap gap-2 mb-6">
+                                        {['Semua', 'Refund Diajukan', 'Refund Diproses', 'Refund Selesai'].map(status => (
+                                            <button key={status} onClick={() => {setStatusFilter(status); setCurrentPage(1);}} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === status ? 'bg-red-600 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}>{status}</button>
+                                        ))}
+                                    </div>
+                                    
+                                    {(() => {
+                                        const refundTransactions = transactions.filter(t => ['Refund Diajukan', 'Refund Diproses', 'Refund Selesai'].includes(t.status));
+                                        const displayedRefunds = (statusFilter === 'Semua' ? refundTransactions : refundTransactions.filter(t => t.status === statusFilter)).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+                                        if (displayedRefunds.length === 0) return <div className="bg-white p-12 rounded-[2.5rem] text-center border border-slate-200 shadow-sm"><RotateCcw size={48} className="mx-auto text-slate-200 mb-4" /><h3 className="text-lg font-bold text-slate-400 uppercase tracking-widest">Tidak ada pengajuan refund</h3></div>;
+
+                                        return (
+                                            <div className="grid gap-6">
+                                                {displayedRefunds.map((trx) => (
+                                                    <div key={trx._id} className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-red-100 shadow-[0_4px_20px_rgb(0,0,0,0.02)] flex flex-col lg:flex-row lg:items-start justify-between gap-8 hover:border-red-400/50 transition-all group">
+                                                        
+                                                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                            {/* INFO KLAIM & ALASAN */}
+                                                            <div>
+                                                                <span className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2 flex items-center gap-2"><AlertTriangle size={14}/> Klaim Refund 100%</span>
+                                                                <h4 className="font-black text-slate-900 text-lg line-clamp-1 mb-1">{trx.productId?.title || 'Barang Dihapus'}</h4>
+                                                                <span className="font-black text-red-600 text-2xl">Rp{trx.price.toLocaleString('id-ID')}</span>
+                                                                
+                                                                <div className="mt-4 bg-red-50 p-4 rounded-2xl border border-red-100">
+                                                                    <p className="text-xs font-black text-slate-800 mb-1">{trx.cancelTitle}</p>
+                                                                    <p className="text-xs text-slate-600 italic">"{trx.cancelReason}"</p>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* INFO REKENING PEMBELI UNTUK DITRANSFER */}
+                                                            <div className="flex flex-col gap-4">
+                                                                <div className="p-5 bg-slate-900 text-white rounded-[2rem] shadow-xl border border-slate-800 h-full">
+                                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block">Tujuan Transfer (Pembeli)</span>
+                                                                    {trx.buyerId?.bankName ? (
+                                                                        <div className="space-y-1">
+                                                                            <p className="font-black text-white text-base leading-tight">{trx.buyerId.bankName}</p>
+                                                                            <p className="font-mono font-black text-blue-400 text-lg tracking-widest">{trx.buyerId.bankAccount}</p>
+                                                                            <div className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2">
+                                                                                <User size={12} className="text-slate-400"/>
+                                                                                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">A.N: {trx.buyerId.bankAccountName || 'BELUM DIISI'}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className="text-xs text-red-400 font-bold flex items-center gap-2"><AlertCircle size={14}/> Pembeli belum mengisi data rekening di profilnya.</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* TOMBOL AKSI ADMIN */}
+                                                        <div className="flex flex-col md:items-end gap-3 min-w-[220px] border-t lg:border-t-0 lg:border-l border-slate-100 pt-6 lg:pt-0 lg:pl-8">
+                                                            <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-full border ${trx.status === 'Refund Selesai' ? 'bg-slate-100 text-slate-500' : 'bg-red-50 text-red-600 border-red-200'}`}>{trx.status}</span>
+                                                            
+                                                            <div className="flex flex-col gap-2 w-full mt-4">
+                                                                {trx.status === 'Refund Diajukan' && (
+                                                                    <button onClick={async () => {
+                                                                        const tid = toast.loading('Memproses...');
+                                                                        try { await api.put(`/transactions/${trx._id}/refund/process`); toast.success('Berhasil diproses', {id: tid}); fetchTransactions(); } catch(e) { toast.error('Gagal', {id: tid}); }
+                                                                    }} className="py-3.5 bg-orange-500 text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-900 transition-all">Proses Refund</button>
+                                                                )}
+                                                                
+                                                                {trx.status === 'Refund Diproses' && (
+                                                                    <button onClick={async () => {
+                                                                        if(!window.confirm("Yakin sudah mentransfer uang kembali ke pembeli?")) return;
+                                                                        const tid = toast.loading('Mencairkan...');
+                                                                        try { await api.put(`/transactions/${trx._id}/refund/complete`); toast.success('Berhasil dikembalikan!', {id: tid}); fetchTransactions(); } catch(e) { toast.error('Gagal', {id: tid}); }
+                                                                    }} className="py-3.5 bg-red-600 text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-900 transition-all shadow-lg shadow-red-900/20">Tandai Uang Telah Ditransfer</button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             )}
 
