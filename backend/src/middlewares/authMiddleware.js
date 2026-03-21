@@ -1,20 +1,27 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-const protect = (req, res, next) => {
+exports.protect = async (req, res, next) => {
     let token;
-    // Cek apakah ada token di header (Bearer Token)
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         try {
             token = req.headers.authorization.split(' ')[1];
-            // Decode token untuk mendapatkan ID User
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            req.user = decoded; // Simpan data user ke dalam request
+            
+            req.user = await User.findById(decoded.id).select('-password');
+            
+            // FITUR BARU: Update waktu terakhir aktif setiap kali user melakukan aksi
+            if (req.user) {
+                req.user.lastActive = Date.now();
+                await req.user.save();
+            }
+
             next();
         } catch (error) {
-            res.status(401).json({ message: 'Sesi tidak valid atau telah berakhir. Silakan login ulang.' });
+            res.status(401).json({ message: 'Tidak ada otorisasi, token gagal' });
         }
     }
-    if (!token) return res.status(401).json({ message: 'Akses ditolak, tidak ada token!' });
+    if (!token) {
+        res.status(401).json({ message: 'Tidak ada otorisasi, tidak ada token' });
+    }
 };
-
-module.exports = { protect };

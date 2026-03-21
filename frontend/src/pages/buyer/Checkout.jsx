@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import useAuthStore from '../../store/authStore';
+import { CheckCircle, AlertCircle, Image as ImageIcon, ArrowLeft } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function Checkout() {
     const { id } = useParams();
@@ -9,23 +11,38 @@ export default function Checkout() {
     const { user } = useAuthStore();
     
     const [product, setProduct] = useState(null);
+    const [paymentMethods, setPaymentMethods] = useState([]);
+    const [selectedMethod, setSelectedMethod] = useState('');
     const [proofImage, setProofImage] = useState(null);
+    const [previewProof, setPreviewProof] = useState(null);
+    
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
 
     useEffect(() => {
-        const fetchProduct = async () => {
+        const fetchData = async () => {
             try {
-                const response = await api.get(`/products/${id}`);
-                const fetchedProduct = response.data.data;
+                // 1. Ambil data produk
+                const productRes = await api.get(`/products/${id}`);
+                const fetchedProduct = productRes.data.data;
                 
-                // 🛡️ PAGAR FRONTEND: Cek apakah ID penjual sama dengan ID user yang sedang login
+                // Proteksi: Tidak boleh beli barang sendiri
                 if (fetchedProduct.sellerId._id === user?.id) {
-                    setErrorMsg('⚠️ Akses Ditolak: Anda tidak bisa melakukan checkout pada barang jualan Anda sendiri!');
+                    setErrorMsg('Akses Ditolak: Anda tidak bisa membeli barang jualan Anda sendiri.');
                     setProduct(null);
                 } else {
                     setProduct(fetchedProduct);
+                }
+
+                // 2. Ambil daftar rekening admin
+                const methodsRes = await api.get('/payment-methods');
+                setPaymentMethods(methodsRes.data.data);
+                
+                // Set default jika ada data
+                if (methodsRes.data.data.length > 0) {
+                    const first = methodsRes.data.data[0];
+                    setSelectedMethod(`${first.bankName} - ${first.accountNumber} (${first.ownerName})`);
                 }
             // eslint-disable-next-line no-unused-vars
             } catch (error) {
@@ -34,95 +51,171 @@ export default function Checkout() {
                 setLoading(false);
             }
         };
-        fetchProduct();
+        fetchData();
     }, [id, user]);
+
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setProofImage(file);
+            setPreviewProof(URL.createObjectURL(file));
+        }
+    };
 
     const handleCheckout = async (e) => {
         e.preventDefault();
-        if (!proofImage) {
-            setErrorMsg('Harap upload bukti transfer terlebih dahulu!');
-            return;
-        }
+        if (!selectedMethod) return toast.error('Pilih metode pembayaran!');
+        if (!proofImage) return toast.error('Upload bukti transfer wajib diisi!');
 
         setSubmitting(true);
-        setErrorMsg('');
+        const toastId = toast.loading("Sedang memproses checkout...");
 
         const formData = new FormData();
         formData.append('productId', product._id);
+        formData.append('paymentMethod', selectedMethod);
         formData.append('proof', proofImage);
 
         try {
             await api.post('/transactions/checkout', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
-            alert('Pembayaran berhasil dikirim! Menunggu verifikasi Admin.');
-            navigate('/');
+            toast.success('Checkout Berhasil! Menunggu verifikasi admin.', { id: toastId });
+            navigate('/transactions');
         } catch (error) {
-            setErrorMsg(error.response?.data?.message || 'Gagal memproses pembayaran.');
+            toast.error(error.response?.data?.message || 'Gagal checkout', { id: toastId });
         } finally {
             setSubmitting(false);
         }
     };
 
-    if (loading) return <div className="text-center mt-20 font-bold">Memuat rincian pembayaran...</div>;
+    if (loading) return (
+        <div className="flex justify-center items-center min-h-[60vh]">
+            <div className="w-10 h-10 border-4 border-slate-200 border-t-[#00478F] rounded-full animate-spin"></div>
+        </div>
+    );
     
-    // Jika ada error (termasuk error karena mencoba beli barang sendiri), tampilkan pesan saja tanpa form
     if (!product) return (
-        <div className="max-w-2xl mx-auto mt-20 p-8 bg-red-50 border border-red-200 rounded-2xl text-center">
-            <span className="text-4xl block mb-4">🚫</span>
-            <h2 className="text-xl font-bold text-red-700 mb-2">Checkout Dibatalkan</h2>
-            <p className="text-red-600 font-medium">{errorMsg}</p>
-            <button onClick={() => navigate('/')} className="mt-6 bg-red-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-red-700 transition">
-                Kembali ke Beranda
+        <div className="max-w-2xl mx-auto mt-20 p-10 bg-white rounded-[2.5rem] text-center shadow-xl border border-slate-100">
+            <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <AlertCircle size={40} />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-2">Oops! Ada Kendala</h2>
+            <p className="text-slate-500 font-medium mb-8">{errorMsg}</p>
+            <button onClick={() => navigate(-1)} className="bg-[#00478F] text-white px-8 py-4 rounded-2xl font-black hover:bg-slate-800 transition shadow-lg flex items-center gap-2 mx-auto">
+                <ArrowLeft size={18} /> Kembali
             </button>
         </div>
     );
 
     return (
-        <div className="max-w-3xl mx-auto p-4 md:p-8">
-            <h1 className="text-2xl font-extrabold text-gray-900 mb-6">Checkout Pembayaran Escrow</h1>
+        <div className="max-w-4xl mx-auto p-4 md:p-10 pb-32">
+            <button onClick={() => navigate(-1)} className="mb-6 flex items-center gap-2 text-slate-500 font-bold hover:text-[#00478F] transition">
+                <ArrowLeft size={20} /> Kembali
+            </button>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mb-6 flex gap-6">
-                <img src={product.imageUrl} alt={product.title} className="w-32 h-32 object-cover rounded-xl border border-gray-100" />
-                <div>
-                    <span className="text-xs font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded uppercase tracking-wider">{product.category}</span>
-                    <h2 className="text-xl font-bold text-gray-900 mt-2">{product.title}</h2>
-                    <p className="text-sm text-gray-500 mt-1">Penjual: {product.sellerId?.name}</p>
-                    <p className="text-2xl font-extrabold text-brand-yellow mt-3">Rp {product.price.toLocaleString('id-ID')}</p>
-                </div>
-            </div>
-
-            <form onSubmit={handleCheckout} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                <div className="bg-blue-50 border border-blue-200 p-5 rounded-xl mb-6 text-center">
-                    <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-2">Transfer ke Rekening Resmi Thrift Hub</p>
-                    <p className="text-sm text-gray-700 font-medium mb-1">BANK BCA</p>
-                    <p className="text-3xl font-black text-gray-900 tracking-widest">8291-1234-56</p>
-                    <p className="text-xs text-gray-500 mt-2">a.n Admin Campus Thrift Hub</p>
-                    <div className="mt-4 p-2 bg-white rounded border border-blue-100 text-sm font-bold">
-                        Total: Rp {product.price.toLocaleString('id-ID')}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* SISI KIRI: INFO PRODUK */}
+                <div className="lg:col-span-5">
+                    <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 sticky top-24">
+                        <img 
+                            src={(product.images && product.images.length > 0) ? product.images[0] : product.imageUrl} 
+                            alt={product.title} 
+                            className="w-full aspect-square object-cover rounded-[2rem] mb-6 bg-slate-50" 
+                        />
+                        <span className="text-[10px] font-black bg-[#FF9500]/10 text-[#FF9500] px-3 py-1 rounded-full uppercase tracking-widest mb-3 inline-block">
+                            {product.category?.name || 'Produk'}
+                        </span>
+                        <h2 className="text-xl font-black text-slate-900 leading-tight mb-2">{product.title}</h2>
+                        <div className="flex items-center justify-between mt-6 pt-6 border-t border-slate-50">
+                            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Total Bayar</p>
+                            <p className="text-2xl font-black text-[#00478F]">Rp{product.price.toLocaleString('id-ID')}</p>
+                        </div>
                     </div>
                 </div>
 
-                {errorMsg && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4 border border-red-200">{errorMsg}</div>}
+                {/* SISI KANAN: FORM PEMBAYARAN */}
+                <div className="lg:col-span-7">
+                    <form onSubmit={handleCheckout} className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
+                        <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
+                            <CheckCircle className="text-green-500" /> Metode Pembayaran
+                        </h3>
 
-                <div className="mb-6">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Upload Bukti Transfer (JPG/PNG)</label>
-                    <input 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={(e) => setProofImage(e.target.files[0])} 
-                        className="w-full border-2 border-dashed border-gray-300 p-4 rounded-xl text-sm focus:outline-none focus:border-brand-yellow"
-                    />
+                        {/* PILIHAN REKENING */}
+                        <div className="space-y-4 mb-8">
+                            {paymentMethods.length === 0 ? (
+                                <p className="text-slate-400 text-sm italic">Metode pembayaran belum tersedia.</p>
+                            ) : (
+                                paymentMethods.map((method) => {
+                                    const val = `${method.bankName} - ${method.accountNumber} (${method.ownerName})`;
+                                    const isSelected = selectedMethod === val;
+                                    return (
+                                        <div key={method._id} className="relative">
+                                            <label className={`flex flex-col p-5 rounded-2xl border-2 transition-all cursor-pointer ${isSelected ? 'border-[#00478F] bg-blue-50/30' : 'border-slate-100 bg-slate-50 hover:border-slate-300'}`}>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-4">
+                                                        <input type="radio" name="pay" checked={isSelected} onChange={() => setSelectedMethod(val)} className="w-5 h-5 accent-[#00478F]" />
+                                                        <div>
+                                                            <p className="font-black text-slate-900">{method.bankName}</p>
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">a.n {method.ownerName}</p>
+                                                        </div>
+                                                    </div>
+                                                    <p className="font-mono font-black text-[#00478F]">{method.accountNumber}</p>
+                                                </div>
+
+                                                {/* AUTO-DISPLAY QRIS JIKA DIPILIH */}
+                                                {isSelected && method.qrImageUrl && (
+                                                    <div className="mt-6 pt-6 border-t border-blue-100 flex flex-col items-center animate-in fade-in slide-in-from-top-4 duration-500">
+                                                        <p className="text-[10px] font-black text-[#00478F] uppercase tracking-widest mb-3">Scan QRIS Berikut:</p>
+                                                        <img src={method.qrImageUrl} alt="QRIS" className="w-48 h-48 object-cover rounded-2xl shadow-md border-4 border-white" />
+                                                    </div>
+                                                )}
+                                            </label>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* UPLOAD BUKTI */}
+                        <div className="mb-10">
+                            <h3 className="text-sm font-black text-slate-900 mb-4 uppercase tracking-widest">Upload Bukti Transfer</h3>
+                            <div className="relative group">
+                                {previewProof ? (
+                                    <div className="relative rounded-2xl overflow-hidden border-2 border-[#00478F]">
+                                        <img src={previewProof} className="w-full h-48 object-cover" alt="Preview" />
+                                        <button 
+                                            type="button" 
+                                            onClick={() => {setProofImage(null); setPreviewProof(null);}}
+                                            className="absolute top-3 right-3 bg-red-500 text-white p-2 rounded-xl shadow-lg hover:scale-110 transition"
+                                        >
+                                            Ganti Gambar
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-200 bg-slate-50 rounded-2xl cursor-pointer hover:bg-slate-100 hover:border-[#00478F] transition-all group">
+                                        <ImageIcon className="text-slate-300 group-hover:text-[#00478F] mb-2 transition-colors" size={32} />
+                                        <p className="text-xs font-black text-slate-400 group-hover:text-[#00478F]">Klik untuk upload bukti bayar</p>
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+                                    </label>
+                                )}
+                            </div>
+                        </div>
+
+                        <button 
+                            type="submit" 
+                            disabled={submitting || paymentMethods.length === 0}
+                            className="w-full bg-[#00478F] text-white py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-blue-900/20 hover:bg-[#FF9500] hover:-translate-y-1 transition-all disabled:opacity-50"
+                        >
+                            {submitting ? 'Memproses...' : 'Konfirmasi Pembayaran'}
+                        </button>
+                        
+                        <p className="text-center text-[10px] font-bold text-slate-400 mt-6 leading-relaxed">
+                            Dana Anda aman bersama tim Escrow Campus Thrift Hub.<br/>
+                            Penjual baru akan menerima dana setelah Anda menerima barang.
+                        </p>
+                    </form>
                 </div>
-
-                <button 
-                    type="submit" 
-                    disabled={submitting} 
-                    className="w-full bg-brand-dark text-brand-yellow font-extrabold py-4 rounded-xl hover:bg-gray-800 transition disabled:opacity-50 shadow-lg"
-                >
-                    {submitting ? 'Mengirim Bukti...' : 'Saya Sudah Transfer'}
-                </button>
-            </form>
+            </div>
         </div>
     );
 }

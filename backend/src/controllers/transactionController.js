@@ -1,35 +1,32 @@
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
+const Review = require('../models/Review');
 const { uploadToCloudinary } = require('../middlewares/upload');
 
-// @desc    Pembeli Melakukan Checkout & Upload Struk
-// @route   POST /api/transactions/checkout
 exports.checkout = async (req, res) => {
     try {
-        const { productId } = req.body;
+        // FITUR BARU: Tangkap paymentMethod dari frontend
+        const { productId, paymentMethod } = req.body;
         const buyerId = req.user.id;
 
         const product = await Product.findById(productId);
         if (!product) return res.status(404).json({ message: 'Barang tidak ditemukan' });
 
-        // 🛡️ PAGAR BACKEND: Tolak jika pembeli adalah penjual barang itu sendiri
         if (product.sellerId.toString() === buyerId) {
             return res.status(400).json({ message: 'Ditolak: Anda tidak bisa membeli barang jualan Anda sendiri!' });
         }
 
+        if (product.stock < 1 || product.status === 'Terjual' || product.status === 'Dihapus') {
+            return res.status(400).json({ message: 'Maaf, stok barang sudah habis atau sudah terjual!' });
+        }
+
         if (!req.file) return res.status(400).json({ message: 'Bukti transfer wajib diupload!' });
 
-        // Upload struk ke Cloudinary
         const proofUrl = await uploadToCloudinary(req.file.buffer, 'proofs');
-
-        // Kalkulasi Keuangan (Komisi 5%)
         const adminFee = product.price * 0.05;
         const sellerIncome = product.price - adminFee;
-
-        // Generate 4-Digit PIN COD
         const codPin = Math.floor(1000 + Math.random() * 9000).toString();
 
-        // SIMPAN DENGAN FORMAT BARU (*Id)
         const transaction = await Transaction.create({
             productId: productId,
             buyerId: buyerId,
@@ -38,11 +35,17 @@ exports.checkout = async (req, res) => {
             adminFee,
             sellerIncome,
             codPin,
-            proofOfPayment: proofUrl
+            proofOfPayment: proofUrl,
+            // FITUR BARU: Simpan pilihan rekening admin ke database
+            paymentMethod: paymentMethod || 'Transfer Bank (Default)' 
         });
 
-        // Ubah status produk agar tidak bisa dibeli orang lain
-        product.status = 'Menunggu Pembayaran';
+        product.stock -= 1;
+        if (product.stock === 0) {
+            product.status = 'Menunggu Pembayaran';
+        } else {
+            product.status = 'Tersedia'; 
+        }
         await product.save();
 
         res.status(201).json({ success: true, transaction, message: 'Checkout berhasil, menunggu admin.' });
@@ -51,14 +54,11 @@ exports.checkout = async (req, res) => {
     }
 };
 
-// @desc    Admin Memverifikasi Uang Masuk / Selesai
-// @route   PUT /api/transactions/:id/status
 exports.updateStatus = async (req, res) => {
     try {
-        // Cek apakah yang akses ini Admin
         if (req.user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak. Hanya Admin!' });
 
-        const { status } = req.body; // 'Dana Ditahan (Siap COD)' atau 'Selesai'
+        const { status } = req.body; 
         const transaction = await Transaction.findById(req.params.id).populate('productId');
 
         if (!transaction) return res.status(404).json({ message: 'Transaksi tidak ditemukan' });
@@ -66,7 +66,6 @@ exports.updateStatus = async (req, res) => {
         transaction.status = status;
         await transaction.save();
 
-        // Jika selesai, ubah juga status produknya
         if (status === 'Selesai') {
             await Product.findByIdAndUpdate(transaction.productId._id, { status: 'Selesai' });
         } else if (status === 'Dana Ditahan (Siap COD)') {
@@ -79,16 +78,14 @@ exports.updateStatus = async (req, res) => {
     }
 };
 
-// @desc    Admin Mengambil Semua Data Transaksi
-// @route   GET /api/transactions
 exports.getAllTransactions = async (req, res) => {
     try {
         if (req.user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak.' });
         
         const transactions = await Transaction.find()
-            .populate('productId', 'title price')
+            .populate('productId', 'title price images imageUrl')
             .populate('buyerId', 'name email')
-            .populate('sellerId', 'name')
+            .populate('sellerId', 'name bankName bankAccount qrisUrl')
             .sort({ createdAt: -1 });
 
         res.status(200).json({ success: true, data: transactions });
@@ -97,38 +94,52 @@ exports.getAllTransactions = async (req, res) => {
     }
 };
 
-// @desc    Ambil Riwayat Pembelian & Penjualan User (DASHBOARD)
-// @route   GET /api/transactions/my-transactions
+// ========================================================
+// FUNGSI INI YANG DIPERBAIKI UNTUK MENCEGAH ULASAN GANDA
+// ========================================================
 exports.getMyTransactions = async (req, res) => {
     try {
         const userId = req.user.id;
-        console.log(`🔍 [DEBUG] Mencari transaksi untuk User ID: ${userId}`);
 
-        // KINI KODE SANGAT BERSIH, TANPA LOGIKA $OR YANG RUMIT
-        const purchases = await Transaction.find({ buyerId: userId })
-            .populate('productId', 'title imageUrl price') 
+        let purchases = await Transaction.find({ buyerId: userId })
+            .populate('productId', 'title imageUrl images price') 
             .populate('sellerId', 'name campus profilePicture')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .lean(); // Wajib pakai lean agar bisa kita modifikasi datanya
 
-        const sales = await Transaction.find({ sellerId: userId })
-            .populate('productId', 'title imageUrl price')
+        let sales = await Transaction.find({ sellerId: userId })
+            .populate('productId', 'title imageUrl images price')
             .populate('buyerId', 'name domisili profilePicture')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .lean();
 
-        console.log(`✅ [DEBUG] Ditemukan: ${purchases.length} Pembelian, ${sales.length} Penjualan`);
+        // Proses menggabungkan data Ulasan ke dalam array Pembelian
+        for (let i = 0; i < purchases.length; i++) {
+            // 1. Coba cari ulasan dengan sistem baru (berdasarkan ID Transaksi)
+            let review = await Review.findOne({ transactionId: purchases[i]._id }).populate('buyerId', 'name profilePicture');
+            
+            // 2. BACKWARD COMPATIBILITY: 
+            // Jika tidak ketemu (karena ini ulasan lama), cari berdasarkan ID Produk dan Pembeli
+            if (!review && purchases[i].productId) {
+                review = await Review.findOne({ 
+                    productId: purchases[i].productId._id, 
+                    buyerId: userId 
+                }).populate('buyerId', 'name profilePicture');
+            }
+
+            // Tempelkan ulasan ke objek transaksi
+            purchases[i].review = review || null; 
+        }
 
         res.status(200).json({ 
             success: true, 
             data: { purchases, sales } 
         });
     } catch (error) {
-        console.error("❌ [DEBUG] Error Get Transactions:", error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
-// @desc    Penjual memverifikasi PIN COD dari Pembeli
-// @route   POST /api/transactions/:id/verify-pin
 exports.verifyCodPin = async (req, res) => {
     try {
         const { pin } = req.body;
@@ -136,26 +147,21 @@ exports.verifyCodPin = async (req, res) => {
 
         if (!transaction) return res.status(404).json({ message: 'Transaksi tidak ditemukan' });
 
-        // 1. Pastikan yang verifikasi adalah penjualnya langsung
         if (transaction.sellerId.toString() !== req.user.id) {
             return res.status(403).json({ message: 'Ditolak: Hanya penjual yang bisa memverifikasi PIN ini' });
         }
 
-        // 2. Pastikan statusnya memang sedang ditahan (Siap COD)
         if (transaction.status !== 'Dana Ditahan (Siap COD)') {
             return res.status(400).json({ message: 'Status transaksi belum siap untuk COD' });
         }
 
-        // 3. Cek Kecocokan PIN
         if (transaction.codPin !== pin) {
             return res.status(400).json({ message: 'PIN SALAH! Pastikan Anda meminta PIN yang benar dari pembeli.' });
         }
 
-        // 4. Jika Valid, Ubah Status jadi Selesai
         transaction.status = 'Selesai';
         await transaction.save();
 
-        // 5. Ubah juga status produk menjadi selesai
         await Product.findByIdAndUpdate(transaction.productId, { status: 'Selesai' });
 
         res.status(200).json({ 

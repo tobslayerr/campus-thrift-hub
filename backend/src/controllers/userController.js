@@ -71,21 +71,22 @@ exports.getSellerProfile = async (req, res) => {
         const seller = await User.findById(req.params.id).select('-password -email -isVerified');
         if (!seller) return res.status(404).json({ message: 'Penjual tidak ditemukan' });
 
-        const products = await Product.find({ sellerId: seller._id, status: 'Tersedia' }).sort({ createdAt: -1 });
+        // PERBAIKAN DI SINI:
+        // Ambil semua barang KECUALI yang statusnya sudah 'Dihapus'
+        const products = await Product.find({ 
+            sellerId: seller._id, 
+            status: { $ne: 'Dihapus' } 
+        }).sort({ createdAt: -1 });
         
         // Ambil ulasan penjual
         const reviews = await Review.find({ sellerId: seller._id })
             .populate('buyerId', 'name profilePicture campus')
-            .populate('productId', 'title imageUrl')
+            .populate('productId', 'title imageUrl images')
             .sort({ createdAt: -1 });
 
         res.status(200).json({ 
             success: true, 
-            data: { 
-                profile: seller, 
-                products, 
-                reviews 
-            } 
+            data: { profile: seller, products, reviews } 
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

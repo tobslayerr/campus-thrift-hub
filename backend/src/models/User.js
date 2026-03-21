@@ -55,6 +55,7 @@ const userSchema = new mongoose.Schema({
         default: 'buyer' 
     },
     bankName: { type: String, default: '' },
+    lastActive: { type: Date, default: Date.now },
     bankAccount: { type: String, default: '' }, 
     qrisUrl: { 
         type: String, default: '' 

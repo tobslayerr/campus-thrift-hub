@@ -74,8 +74,8 @@ export default function MyProfile() {
         if (!isChanged) return;
 
         setUploading(true);
-        // Memulai Toast Loading
-        const toastId = toast.loading('Menyimpan perubahan profil...');
+        // Memulai Toast Loading dengan ID Statis agar tidak bertumpuk
+        const toastId = toast.loading('Menyimpan perubahan profil...', { id: 'profile-update' });
 
         const submitData = new FormData();
         submitData.append('name', formData.name);
@@ -88,11 +88,16 @@ export default function MyProfile() {
         if (formData.photoFile) submitData.append('avatar', formData.photoFile);
         if (formData.qrisFile) submitData.append('qris', formData.qrisFile);
 
+        // PERBAIKAN KRUSIAL: Memaksa Axios menggunakan multipart/form-data
+        const config = {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        };
+
         try {
-            // PERBAIKAN KRUSIAL: 
-            // Jangan memasang { headers: { 'Content-Type': 'multipart/form-data' } }
-            // Biarkan Axios otomatis membuatnya bersama dengan kode Boundary
-            const response = await api.put('/users/profile', submitData);
+            // Masukkan config ke dalam request
+            const response = await api.put('/users/profile', submitData, config);
             
             // Pagar Keamanan: Pastikan data dari backend benar-benar ada
             if (!response || !response.data) throw new Error("Respons dari server tidak valid");
@@ -113,9 +118,6 @@ export default function MyProfile() {
             }, 1500);
 
         } catch (error) {
-            // ERROR TRACKER di Console (sangat berguna jika masih error)
-            console.error("❌ ERROR SAAT UPDATE PROFIL:", error);
-
             // Logika pintar untuk menangkap pesan error yang paling akurat
             let errorMsg = 'Terjadi kesalahan sistem yang tidak diketahui.';
             if (error.response && error.response.data && error.response.data.message) {

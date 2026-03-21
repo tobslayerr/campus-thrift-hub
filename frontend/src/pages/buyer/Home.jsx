@@ -72,7 +72,12 @@ export default function Home() {
                     </div>
                 )}
                 <Link to={`/product/${product._id}`}>
-                    <img src={product.imageUrl} alt={product.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                    {/* PERBAIKAN DI SINI: Memanggil array images[0] */}
+                    <img 
+                        src={(product.images && product.images.length > 0) ? product.images[0] : product.imageUrl} 
+                        alt={product.title} 
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                    />
                 </Link>
                 <div className="absolute inset-0 bg-[#00478F]/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none backdrop-blur-[2px]">
                     <span className="bg-white text-[#00478F] px-6 py-3 rounded-full font-black text-[10px] uppercase tracking-widest transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500 shadow-xl">

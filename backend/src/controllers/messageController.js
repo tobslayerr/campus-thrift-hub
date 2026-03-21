@@ -40,15 +40,18 @@ exports.sendMessage = async (req, res) => {
 // @route   GET /api/messages/chat/:receiverId
 exports.getMessages = async (req, res) => {
     try {
+        const { targetUserId } = req.params;
         const myId = req.user.id;
-        const targetId = req.params.receiverId;
 
+        // 👇 PASTIKAN ADA POPULATE INI AGAR FRONTEND BISA MENERIMA DATA PRODUK 👇
         const messages = await Message.find({
             $or: [
-                { senderId: myId, receiverId: targetId },
-                { senderId: targetId, receiverId: myId }
+                { senderId: myId, receiverId: targetUserId },
+                { senderId: targetUserId, receiverId: myId }
             ]
-        }).sort({ createdAt: 1 }); 
+        })
+        .populate('productId', 'title price images imageUrl') // Wajib ada baris ini!
+        .sort({ createdAt: 1 });
 
         res.status(200).json({ success: true, data: messages });
     } catch (error) {

@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
-// Import deleteCategory
-const { getCategories, addCategory, deleteCategory } = require('../controllers/categoryController');
+const { getCategories, createCategory, updateCategory, deleteCategory } = require('../controllers/categoryController');
 
 router.get('/', getCategories);
-router.post('/', addCategory); 
-router.delete('/:id', deleteCategory); // Rute baru untuk admin menghapus kategori
+router.post('/', createCategory);
+
+// Tambahkan rute untuk Edit (PUT) dan Hapus (DELETE)
+router.put('/:id', updateCategory);
+router.delete('/:id', deleteCategory);
 
 module.exports = router;

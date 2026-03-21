@@ -5,7 +5,8 @@ import toast from 'react-hot-toast';
 import { 
     ClipboardList, Clock, ShieldCheck, 
     Landmark, CheckCircle, MessageSquare, 
-    AlertTriangle, Lock, KeyRound, ArrowRight, User
+    AlertTriangle, Lock, KeyRound, ArrowRight, User,
+    Star, ImagePlus, X
 } from 'lucide-react';
 
 export default function MyTransactions() {
@@ -14,9 +15,15 @@ export default function MyTransactions() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('pembelian');
     
-    // State untuk PIN
     const [pinInputs, setPinInputs] = useState({});
     const [verifying, setVerifying] = useState(false);
+
+    // STATE ULASAN
+    const [reviewingTrxId, setReviewingTrxId] = useState(null);
+    const [ratingForm, setRatingForm] = useState(5);
+    const [commentForm, setCommentForm] = useState('');
+    const [reviewImages, setReviewImages] = useState([]);
+    const [submittingReview, setSubmittingReview] = useState(false);
 
     const fetchTransactions = async () => {
         try {
@@ -37,17 +44,15 @@ export default function MyTransactions() {
 
     const handleVerifyPin = async (transactionId) => {
         const pin = pinInputs[transactionId];
-        if (!pin || pin.length !== 4) {
-            return toast.error('Masukkan 4 digit PIN dengan benar!');
-        }
+        if (!pin || pin.length !== 4) return toast.error('Masukkan 4 digit PIN dengan benar!');
 
         setVerifying(true);
         const toastId = toast.loading('Memverifikasi PIN...');
         try {
             const response = await api.post(`/transactions/${transactionId}/verify-pin`, { pin });
             toast.success(response.data.message, { id: toastId });
-            setPinInputs({ ...pinInputs, [transactionId]: '' }); // Clear input
-            fetchTransactions(); // Refresh data
+            setPinInputs({ ...pinInputs, [transactionId]: '' }); 
+            fetchTransactions(); 
         } catch (error) {
             toast.error(error.response?.data?.message || 'Gagal memverifikasi PIN', { id: toastId });
         } finally {
@@ -55,53 +60,71 @@ export default function MyTransactions() {
         }
     };
 
-    // PREMIUM STATUS BADGES
-    const getStatusBadge = (status) => {
-        switch (status) {
-            case 'Menunggu Verifikasi':
-                return (
-                    <span className="flex items-center gap-1.5 bg-orange-50 text-[#FF9500] px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-orange-200">
-                        <Clock size={14} /> Cek Admin
-                    </span>
-                );
-            case 'Dana Ditahan (Siap COD)':
-                return (
-                    <span className="flex items-center gap-1.5 bg-[#00478F]/10 text-[#00478F] px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-blue-200">
-                        <ShieldCheck size={14} /> Siap COD
-                    </span>
-                );
-            case 'Selesai':
-                return (
-                    <span className="flex items-center gap-1.5 bg-purple-50 text-purple-600 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-purple-200">
-                        <Landmark size={14} /> Proses Cair
-                    </span>
-                );
-            case 'Dana Dicairkan':
-                return (
-                    <span className="flex items-center gap-1.5 bg-green-50 text-green-600 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-green-200">
-                        <CheckCircle size={14} /> Selesai
-                    </span>
-                );
-            case 'Sengketa':
-                return (
-                    <span className="flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-red-200">
-                        <AlertTriangle size={14} /> Sengketa
-                    </span>
-                );
-            default:
-                return (
-                    <span className="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-slate-200">
-                        <Clock size={14} /> Diproses
-                    </span>
-                );
+    // HANDLER GAMBAR ULASAN
+    const handleAddReviewImages = (e) => {
+        const files = Array.from(e.target.files);
+        if (reviewImages.length + files.length > 5) return toast.error("Maksimal 5 gambar!");
+        const newImages = files.map(file => ({ file, preview: URL.createObjectURL(file) }));
+        setReviewImages([...reviewImages, ...newImages]);
+    };
+
+    const removeReviewImage = (index) => {
+        setReviewImages(reviewImages.filter((_, i) => i !== index));
+    };
+
+    // SUBMIT ULASAN
+    const handleSubmitReview = async (e, trx) => {
+        e.preventDefault();
+        setSubmittingReview(true);
+        const toastId = toast.loading('Mengirim ulasan...');
+        
+        const formData = new FormData();
+        const productData = trx.productId || trx.product;
+        const sellerData = trx.sellerId || trx.seller;
+
+        formData.append('productId', productData._id);
+        formData.append('sellerId', sellerData._id);
+        formData.append('transactionId', trx._id); // MENGIKAT ULASAN KE TRANSAKSI
+        formData.append('rating', ratingForm);
+        formData.append('comment', commentForm);
+        
+        reviewImages.forEach(img => {
+            formData.append('images', img.file);
+        });
+
+        try {
+            const res = await api.post('/reviews', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            toast.success('Ulasan berhasil dikirim! Terima kasih.', { id: toastId });
+            
+            // Langsung update state pembelian agar ulasan muncul tanpa refresh halaman
+            setPurchases(prevPurchases => 
+                prevPurchases.map(p => 
+                    p._id === trx._id ? { ...p, review: res.data.data } : p
+                )
+            );
+            
+            setReviewingTrxId(null);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Gagal mengirim ulasan', { id: toastId });
+        } finally {
+            setSubmittingReview(false);
         }
     };
 
-    if (loading) return (
-        <div className="flex justify-center items-center min-h-[60vh]">
-            <div className="w-12 h-12 border-4 border-slate-100 border-t-[#00478F] rounded-full animate-spin"></div>
-        </div>
-    );
+    const getStatusBadge = (status) => {
+        switch (status) {
+            case 'Menunggu Verifikasi': return <span className="flex items-center gap-1.5 bg-orange-50 text-[#FF9500] px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-orange-200"><Clock size={14} /> Cek Admin</span>;
+            case 'Dana Ditahan (Siap COD)': return <span className="flex items-center gap-1.5 bg-[#00478F]/10 text-[#00478F] px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-blue-200"><ShieldCheck size={14} /> Siap COD</span>;
+            case 'Selesai': return <span className="flex items-center gap-1.5 bg-purple-50 text-purple-600 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-purple-200"><Landmark size={14} /> Selesai</span>;
+            case 'Dana Dicairkan': return <span className="flex items-center gap-1.5 bg-green-50 text-green-600 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-green-200"><CheckCircle size={14} /> Dana Cair</span>;
+            case 'Sengketa': return <span className="flex items-center gap-1.5 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-red-200"><AlertTriangle size={14} /> Sengketa</span>;
+            default: return <span className="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-slate-200"><Clock size={14} /> Diproses</span>;
+        }
+    };
+
+    if (loading) return <div className="flex justify-center items-center min-h-[60vh]"><div className="w-12 h-12 border-4 border-slate-100 border-t-[#00478F] rounded-full animate-spin"></div></div>;
 
     const activeData = activeTab === 'pembelian' ? purchases : sales;
 
@@ -115,19 +138,12 @@ export default function MyTransactions() {
                 <p className="text-slate-500 font-medium">Pantau keamanan dana dan jadwal COD barang Anda di sini.</p>
             </div>
 
-            {/* TAB NAVIGASI MODERN */}
             <div className="flex gap-8 border-b border-slate-200 mb-8 overflow-x-auto no-scrollbar">
-                <button 
-                    onClick={() => setActiveTab('pembelian')} 
-                    className={`pb-4 font-black text-lg transition-all whitespace-nowrap relative ${activeTab === 'pembelian' ? 'text-[#00478F]' : 'text-slate-400 hover:text-slate-600'}`}
-                >
+                <button onClick={() => setActiveTab('pembelian')} className={`pb-4 font-black text-lg transition-all whitespace-nowrap relative ${activeTab === 'pembelian' ? 'text-[#00478F]' : 'text-slate-400 hover:text-slate-600'}`}>
                     Pembelian Saya ({purchases.length})
                     {activeTab === 'pembelian' && <span className="absolute bottom-0 left-0 w-full h-1 bg-[#FF9500] rounded-t-lg"></span>}
                 </button>
-                <button 
-                    onClick={() => setActiveTab('penjualan')} 
-                    className={`pb-4 font-black text-lg transition-all whitespace-nowrap relative ${activeTab === 'penjualan' ? 'text-[#00478F]' : 'text-slate-400 hover:text-slate-600'}`}
-                >
+                <button onClick={() => setActiveTab('penjualan')} className={`pb-4 font-black text-lg transition-all whitespace-nowrap relative ${activeTab === 'penjualan' ? 'text-[#00478F]' : 'text-slate-400 hover:text-slate-600'}`}>
                     Penjualan Saya ({sales.length})
                     {activeTab === 'penjualan' && <span className="absolute bottom-0 left-0 w-full h-1 bg-[#FF9500] rounded-t-lg"></span>}
                 </button>
@@ -153,7 +169,6 @@ export default function MyTransactions() {
                         return (
                             <div key={trx._id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-blue-900/5 transition-all duration-300 overflow-hidden">
                                 
-                                {/* HEADER KARTU (TANGGAL & STATUS) */}
                                 <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
                                     <span className="text-xs font-bold text-slate-400 flex items-center gap-2">
                                         <Clock size={14} /> 
@@ -164,77 +179,138 @@ export default function MyTransactions() {
 
                                 <div className="p-6">
                                     <div className="flex flex-col lg:flex-row gap-6 lg:items-center">
-                                        
-                                        {/* INFO PRODUK */}
                                         <div className="flex items-center gap-5 flex-1">
                                             <div className="w-24 h-24 rounded-2xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
-                                                <img src={productData.imageUrl || 'https://via.placeholder.com/150'} alt="produk" className="w-full h-full object-cover" />
+                                                <img src={(productData.images && productData.images.length > 0) ? productData.images[0] : (productData.imageUrl || 'https://via.placeholder.com/150')} alt="produk" className="w-full h-full object-cover" />
                                             </div>
                                             <div>
-                                                <h3 className="font-black text-slate-900 text-lg line-clamp-2 leading-tight hover:text-[#00478F] transition-colors cursor-pointer">
-                                                    {productData.title || 'Produk Dihapus'}
-                                                </h3>
+                                                <h3 className="font-black text-slate-900 text-lg line-clamp-2 leading-tight hover:text-[#00478F] transition-colors cursor-pointer">{productData.title || 'Produk Dihapus'}</h3>
                                                 <p className="font-black text-[#00478F] mt-2 text-xl">Rp{priceToDisplay.toLocaleString('id-ID')}</p>
                                             </div>
                                         </div>
 
-                                        {/* INFO LAWAN TRANSAKSI */}
                                         <div className="flex-1 lg:border-l border-slate-100 lg:pl-8 flex justify-between items-center pt-4 lg:pt-0 border-t lg:border-t-0 mt-4 lg:mt-0">
                                             <div>
-                                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-3">
-                                                    {activeTab === 'pembelian' ? 'Informasi Penjual' : 'Informasi Pembeli'}
-                                                </p>
+                                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-3">{activeTab === 'pembelian' ? 'Informasi Penjual' : 'Informasi Pembeli'}</p>
                                                 <div className="flex items-center gap-3">
                                                     <img src={opponentData.profilePicture || 'https://via.placeholder.com/150'} alt="avatar" className="w-10 h-10 rounded-full ring-2 ring-slate-100 object-cover" />
                                                     <div>
                                                         <p className="font-bold text-slate-800">{opponentData.name || 'User Tidak Diketahui'}</p>
-                                                        <p className="text-xs text-slate-500 font-medium truncate max-w-[150px] flex items-center gap-1">
-                                                            <User size={12} /> {opponentData.campus || opponentData.domisili || 'Lokasi rahasia'}
-                                                        </p>
+                                                        <p className="text-xs text-slate-500 font-medium truncate max-w-[150px] flex items-center gap-1"><User size={12} /> {opponentData.campus || opponentData.domisili || 'Lokasi rahasia'}</p>
                                                     </div>
                                                 </div>
                                             </div>
-                                            {/* TOMBOL CHAT */}
                                             {opponentData._id && (
-                                                <Link to={`/chat/${opponentData._id}`} className="w-12 h-12 rounded-2xl bg-[#FF9500]/10 text-[#FF9500] flex items-center justify-center hover:bg-[#FF9500] hover:text-white transition-all shadow-sm shrink-0" title="Chat Sekarang">
-                                                    <MessageSquare size={20} />
-                                                </Link>
+                                                <Link to={`/chat/${opponentData._id}`} className="w-12 h-12 rounded-2xl bg-[#FF9500]/10 text-[#FF9500] flex items-center justify-center hover:bg-[#FF9500] hover:text-white transition-all shadow-sm shrink-0"><MessageSquare size={20} /></Link>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* ========================================== */}
-                                    {/* ZONA ESCROW (PIN COD & KEAMANAN)           */}
-                                    {/* ========================================== */}
-                                    
                                     {/* 1. PEMBELI: LIHAT PIN RAHASIA */}
                                     {activeTab === 'pembelian' && trx.status === 'Dana Ditahan (Siap COD)' && (
                                         <div className="mt-6 p-6 bg-[#00478F] rounded-2xl flex flex-col md:flex-row items-center justify-between text-white shadow-xl shadow-blue-900/10 gap-6 relative overflow-hidden">
-                                            <div className="absolute -right-10 -top-10 text-white/5">
-                                                <Lock size={150} />
-                                            </div>
+                                            <div className="absolute -right-10 -top-10 text-white/5"><Lock size={150} /></div>
                                             <div className="relative z-10 flex items-center gap-4">
-                                                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
-                                                    <KeyRound size={24} className="text-[#FF9500]" />
-                                                </div>
+                                                <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center"><KeyRound size={24} className="text-[#FF9500]" /></div>
                                                 <div>
                                                     <p className="text-xs text-blue-200 font-black uppercase tracking-widest mb-1">PIN Rahasia COD</p>
-                                                    <p className="text-sm font-medium opacity-90">Berikan ke penjual <strong className="text-[#FF9500]">HANYA</strong> jika barang sudah diterima & dicek.</p>
+                                                    <p className="text-sm font-medium opacity-90">Berikan ke penjual <strong className="text-[#FF9500]">HANYA</strong> jika barang sudah diterima.</p>
                                                 </div>
                                             </div>
-                                            <div className="relative z-10 bg-white text-[#00478F] px-8 py-3 rounded-xl font-black text-3xl tracking-[0.4em] shadow-inner border-2 border-[#FF9500]">
-                                                {trx.codPin}
-                                            </div>
+                                            <div className="relative z-10 bg-white text-[#00478F] px-8 py-3 rounded-xl font-black text-3xl tracking-[0.4em] shadow-inner border-2 border-[#FF9500]">{trx.codPin}</div>
                                         </div>
                                     )}
 
-                                    {/* 2. PENJUAL: INPUT PIN PEMBELI */}
+                                    {/* 2. PEMBELI: FORM BERI ULASAN ATAU TAMPILKAN HISTORY ULASAN */}
+                                    {activeTab === 'pembelian' && (trx.status === 'Selesai' || trx.status === 'Dana Dicairkan') && (
+                                        <div className="mt-6 border-t border-slate-100 pt-6">
+                                            {trx.review ? (
+                                                // TAMPILKAN HISTORY ULASAN JIKA SUDAH PERNAH DIKIRIM UNTUK TRANSAKSI INI
+                                                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative overflow-hidden">
+                                                    <div className="absolute top-0 right-0 bg-[#FF9500] text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest">
+                                                        Ulasan Anda
+                                                    </div>
+                                                    <div className="flex items-center gap-3 mb-3">
+                                                        <img src={trx.review.buyerId?.profilePicture || 'https://via.placeholder.com/150'} className="w-10 h-10 rounded-full object-cover" alt=""/>
+                                                        <div className="flex-1">
+                                                            <p className="font-black text-slate-800 text-sm">Anda</p>
+                                                            <div className="flex text-[#FF9500] mt-1">
+                                                                {[...Array(5)].map((_, i) => (<Star key={i} size={10} fill={i < trx.review.rating ? "#FF9500" : "none"} strokeWidth={2.5} />))}
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-[10px] text-slate-400 font-bold">{new Date(trx.review.createdAt).toLocaleDateString('id-ID')}</span>
+                                                    </div>
+                                                    <p className="text-slate-600 text-sm font-medium italic mb-3">"{trx.review.comment}"</p>
+                                                    {trx.review.images && trx.review.images.length > 0 && (
+                                                        <div className="flex gap-2 overflow-x-auto pb-1">
+                                                            {trx.review.images.map((img, idx) => (
+                                                                <img key={idx} src={img} alt="ulasan" className="w-16 h-16 rounded-xl object-cover border border-slate-200 shrink-0 hover:scale-105 transition-transform" onClick={() => window.open(img, '_blank')} />
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : reviewingTrxId === trx._id ? (
+                                                // FORM BERI ULASAN
+                                                <div className="bg-slate-50 p-6 md:p-8 rounded-2xl border border-slate-200">
+                                                    <div className="flex justify-between items-center mb-6 border-b border-slate-200 pb-4">
+                                                        <h4 className="font-black text-slate-800 text-lg">Nilai Pembelian Ini</h4>
+                                                        <button onClick={() => setReviewingTrxId(null)} className="text-slate-400 hover:text-red-500 bg-white p-2 rounded-full shadow-sm"><X size={18}/></button>
+                                                    </div>
+                                                    
+                                                    <form onSubmit={(e) => handleSubmitReview(e, trx)} className="space-y-6">
+                                                        <div>
+                                                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Kualitas Barang & Pelayanan</label>
+                                                            <div className="flex gap-3">
+                                                                {[1,2,3,4,5].map(num => (
+                                                                    <button type="button" key={num} onClick={() => setRatingForm(num)} className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-sm ${ratingForm >= num ? 'bg-[#FF9500] text-white scale-110' : 'bg-white border border-slate-200 text-slate-300'}`}>
+                                                                        <Star size={20} fill={ratingForm >= num ? "currentColor" : "none"} />
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Tulis Ulasan</label>
+                                                            <textarea required value={commentForm} onChange={(e) => setCommentForm(e.target.value)} className="w-full p-4 rounded-xl border border-slate-200 focus:border-[#00478F] outline-none text-sm font-medium text-slate-700 bg-white" placeholder="Bagaimana kondisi barangnya? Apakah penjual ramah?" rows="3"></textarea>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-3">Upload Foto (Maks 5)</label>
+                                                            <div className="flex gap-3 overflow-x-auto pb-2">
+                                                                {reviewImages.map((img, idx) => (
+                                                                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded-xl overflow-hidden group border border-slate-200 bg-white p-1 shadow-sm">
+                                                                        <img src={img.preview} alt="preview" className="w-full h-full object-cover rounded-lg" />
+                                                                        <button type="button" onClick={() => removeReviewImage(idx)} className="absolute inset-0 bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all rounded-lg m-1"><X size={18}/></button>
+                                                                    </div>
+                                                                ))}
+                                                                {reviewImages.length < 5 && (
+                                                                    <label className="w-20 h-20 shrink-0 border-2 border-dashed border-slate-300 bg-white rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-[#FF9500] hover:text-[#FF9500] transition-colors text-slate-400 shadow-sm">
+                                                                        <ImagePlus size={24} className="mb-1" />
+                                                                        <span className="text-[9px] font-bold">Tambah</span>
+                                                                        <input type="file" multiple accept="image/*" onChange={handleAddReviewImages} className="hidden" />
+                                                                    </label>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <button type="submit" disabled={submittingReview} className="w-full bg-[#00478F] text-white font-black py-4 rounded-xl hover:bg-[#FF9500] uppercase text-xs tracking-widest transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50">
+                                                            {submittingReview ? 'Mengirim...' : 'Kirim Penilaian'}
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            ) : (
+                                                <button 
+                                                    onClick={() => { setReviewingTrxId(trx._id); setRatingForm(5); setCommentForm(''); setReviewImages([]); }} 
+                                                    className="w-full flex items-center justify-center gap-2 py-4 bg-[#FF9500]/10 text-[#FF9500] font-black rounded-xl hover:bg-[#FF9500] hover:text-white transition-all uppercase text-xs tracking-widest border border-[#FF9500]/20"
+                                                >
+                                                    <Star size={18} fill="currentColor" /> Beri Ulasan & Penilaian
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* 3. PENJUAL: INPUT PIN PEMBELI */}
                                     {activeTab === 'penjualan' && trx.status === 'Dana Ditahan (Siap COD)' && (
                                         <div className="mt-6 p-6 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6">
                                             <div className="flex items-start gap-4 flex-1">
-                                                <div className="w-12 h-12 bg-[#FF9500]/10 rounded-full flex items-center justify-center shrink-0">
-                                                    <Lock size={24} className="text-[#FF9500]" />
-                                                </div>
+                                                <div className="w-12 h-12 bg-[#FF9500]/10 rounded-full flex items-center justify-center shrink-0"><Lock size={24} className="text-[#FF9500]" /></div>
                                                 <div>
                                                     <p className="font-black text-slate-800 text-lg mb-1">Verifikasi Transaksi COD</p>
                                                     <p className="text-xs text-slate-500 font-medium leading-relaxed">Minta 4-Digit PIN dari pembeli saat ketemuan untuk mencairkan dana Anda ke rekening.</p>
@@ -247,28 +323,22 @@ export default function MyTransactions() {
                                                     placeholder="• • • •"
                                                     value={pinInputs[trx._id] || ''}
                                                     onChange={(e) => {
-                                                        const val = e.target.value.replace(/\D/g, ''); // Hanya angka
+                                                        const val = e.target.value.replace(/\D/g, ''); 
                                                         setPinInputs({...pinInputs, [trx._id]: val})
                                                     }}
                                                     className="w-full sm:w-32 px-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-center text-xl tracking-[0.5em] font-black focus:border-[#00478F] outline-none transition-colors"
                                                 />
-                                                <button 
-                                                    onClick={() => handleVerifyPin(trx._id)}
-                                                    disabled={verifying || (pinInputs[trx._id]?.length !== 4)}
-                                                    className="w-full sm:w-auto bg-[#00478F] text-white font-black px-8 py-3 rounded-xl hover:bg-[#FF9500] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                                                >
+                                                <button onClick={() => handleVerifyPin(trx._id)} disabled={verifying || (pinInputs[trx._id]?.length !== 4)} className="w-full sm:w-auto bg-[#00478F] text-white font-black px-8 py-3 rounded-xl hover:bg-[#FF9500] transition-colors disabled:opacity-50 whitespace-nowrap">
                                                     {verifying ? 'Cek...' : 'Cairkan'}
                                                 </button>
                                             </div>
                                         </div>
                                     )}
 
-                                    {/* 3. PENJUAL: MENUNGGU TRANSFER ADMIN */}
+                                    {/* 4. PENJUAL: MENUNGGU TRANSFER ADMIN */}
                                     {trx.status === 'Selesai' && activeTab === 'penjualan' && (
                                         <div className="mt-6 p-5 bg-purple-50 border border-purple-100 rounded-2xl flex items-center gap-4">
-                                            <div className="w-10 h-10 bg-purple-200 text-purple-700 rounded-full flex items-center justify-center shrink-0">
-                                                <Landmark size={20} />
-                                            </div>
+                                            <div className="w-10 h-10 bg-purple-200 text-purple-700 rounded-full flex items-center justify-center shrink-0"><Landmark size={20} /></div>
                                             <div>
                                                 <p className="text-sm font-black text-purple-900">COD Berhasil! Menunggu Transfer Admin</p>
                                                 <p className="text-xs text-purple-700 mt-1 font-medium leading-relaxed">Dana <strong>Rp{(trx.sellerIncome || priceToDisplay).toLocaleString('id-ID')}</strong> akan ditransfer ke rekening Anda dalam waktu maksimal 1x24 jam kerja.</p>
@@ -276,12 +346,10 @@ export default function MyTransactions() {
                                         </div>
                                     )}
 
-                                    {/* 4. PENJUAL: DANA SUDAH CAIR */}
+                                    {/* 5. PENJUAL: DANA SUDAH CAIR */}
                                     {trx.status === 'Dana Dicairkan' && activeTab === 'penjualan' && (
                                         <div className="mt-6 p-5 bg-green-50 border border-green-100 rounded-2xl flex items-center gap-4">
-                                            <div className="w-10 h-10 bg-green-200 text-green-700 rounded-full flex items-center justify-center shrink-0">
-                                                <CheckCircle size={20} />
-                                            </div>
+                                            <div className="w-10 h-10 bg-green-200 text-green-700 rounded-full flex items-center justify-center shrink-0"><CheckCircle size={20} /></div>
                                             <div>
                                                 <p className="text-sm font-black text-green-900">Transaksi Selesai & Dana Telah Cair</p>
                                                 <p className="text-xs text-green-700 mt-1 font-medium">Silakan cek mutasi Rekening atau E-Wallet Anda.</p>
