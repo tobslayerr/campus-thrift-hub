@@ -55,7 +55,6 @@ const userSchema = new mongoose.Schema({
         default: 'buyer' 
     },
     bankName: { type: String, default: '' },
-    bankAccount: { type: String, default: null },
     bankAccountName: { type: String, default: null },
     lastActive: { type: Date, default: Date.now },
     bankAccount: { type: String, default: '' }, 
@@ -75,7 +74,18 @@ const userSchema = new mongoose.Schema({
     strikeCount: { 
         type: Number, 
         default: 0 
+    },
+    
+    // ==========================================
+    // TAMBAHAN UNTUK FITUR LUPA PASSWORD
+    // ==========================================
+    resetPasswordOtp: { 
+        type: String 
+    },
+    resetPasswordOtpExpires: { 
+        type: Date 
     }
+
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

@@ -2,7 +2,7 @@ const User = require('../models/User');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const sendEmail = require('../utils/sendEmail');
-const { uploadToCloudinary } = require('../middlewares/upload'); // Import helper upload
+const { uploadToCloudinary } = require('../middlewares/upload');
 
 // @desc    Registrasi User Baru
 // @route   POST /api/auth/register
@@ -60,7 +60,7 @@ exports.registerUser = async (req, res) => {
     }
 };
 
-// @desc    Verifikasi OTP
+// @desc    Verifikasi OTP saat Registrasi
 // @route   POST /api/auth/verify
 exports.verifyOTP = async (req, res) => {
     try {
@@ -93,13 +93,8 @@ exports.loginUser = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ message: 'Password salah!' });
 
-        // =========================================================
-        // 🔥 PENGECEKAN STATUS BANNED SEBELUM MEMBERIKAN TOKEN 🔥
-        // =========================================================
         if (user.isBanned) {
             const now = new Date();
-            
-            // Cek apakah ban permanen (!user.banUntil) ATAU masa ban belum habis
             if (!user.banUntil || new Date(user.banUntil) > now) {
                 return res.status(403).json({ 
                     success: false, 
@@ -109,14 +104,12 @@ exports.loginUser = async (req, res) => {
                     message: 'Akun Anda telah diblokir oleh Admin.' 
                 });
             } else {
-                // Masa hukuman sudah lewat (Expired), lepaskan ban secara otomatis
                 user.isBanned = false;
                 user.banReason = null;
                 user.banUntil = null;
                 await user.save();
             }
         }
-        // =========================================================
 
         const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
@@ -141,6 +134,104 @@ exports.loginUser = async (req, res) => {
     }
 };
 
+// @desc    Admin Login
+// @route   POST /api/auth/admin/login
+exports.adminLogin = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const user = await User.findOne({ email });
+        
+        if (!user || user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak' });
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) return res.status(400).json({ message: 'Kredensial tidak valid' });
+
+        const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
+        res.status(200).json({ success: true, token, admin: { id: user._id, name: user.name, role: user.role } });
+    } catch (error) { 
+        res.status(500).json({ success: false, error: error.message }); 
+    }
+};
+
+// ==========================================
+// FITUR LUPA PASSWORD
+// ==========================================
+
+// @desc    Minta OTP Lupa Password
+// @route   POST /api/auth/forgot-password
+exports.forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const user = await User.findOne({ email });
+
+        if (!user) return res.status(404).json({ message: 'Email tidak ditemukan di sistem.' });
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        
+        user.resetPasswordOtp = otp;
+        user.resetPasswordOtpExpires = Date.now() + 15 * 60 * 1000; 
+        await user.save();
+
+        const message = `Halo ${user.name},\n\nAnda meminta untuk mereset kata sandi. Berikut adalah kode OTP Anda:\n\n${otp}\n\nKode ini akan kadaluarsa dalam 15 menit. Jika Anda tidak merasa memintanya, abaikan email ini.`;
+
+        await sendEmail({
+            email: user.email,
+            subject: 'Kode OTP Reset Password - Campus Thrift Hub',
+            message: message
+        });
+
+        res.status(200).json({ success: true, message: 'Kode OTP telah dikirim ke email Anda.' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Gagal memproses permintaan.', error: error.message });
+    }
+};
+
+// @desc    Verifikasi OTP untuk Reset Password
+// @route   POST /api/auth/verify-reset-otp
+exports.verifyResetOtp = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        const user = await User.findOne({ email });
+
+        if (!user) return res.status(404).json({ message: 'Pengguna tidak ditemukan.' });
+        if (user.resetPasswordOtp !== otp) return res.status(400).json({ message: 'Kode OTP salah.' });
+        if (user.resetPasswordOtpExpires < Date.now()) return res.status(400).json({ message: 'Kode OTP sudah kadaluarsa. Silakan minta ulang.' });
+
+        res.status(200).json({ success: true, message: 'OTP Valid.' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// @desc    Ganti Password Baru
+// @route   POST /api/auth/reset-password
+exports.resetPassword = async (req, res) => {
+    try {
+        const { email, otp, newPassword } = req.body;
+        const user = await User.findOne({ email });
+
+        if (!user) return res.status(404).json({ message: 'Pengguna tidak ditemukan.' });
+        if (user.resetPasswordOtp !== otp || user.resetPasswordOtpExpires < Date.now()) {
+            return res.status(400).json({ message: 'Sesi reset password tidak valid atau kadaluarsa.' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(newPassword, salt);
+        
+        user.resetPasswordOtp = undefined;
+        user.resetPasswordOtpExpires = undefined;
+        await user.save();
+
+        res.status(200).json({ success: true, message: 'Password berhasil diubah. Silakan login.' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// ==========================================
+// FUNGSI PROFIL PENGGUNA
+// ==========================================
+
 // @desc    Get Current User Data
 // @route   GET /api/auth/me
 exports.getMe = async (req, res) => {
@@ -152,7 +243,7 @@ exports.getMe = async (req, res) => {
     }
 };
 
-// @desc    Update Profile & Rekening (Privat)
+// @desc    Update Profile & Rekening
 // @route   PUT /api/auth/update-profile
 exports.updateProfile = async (req, res) => {
     try {
@@ -162,21 +253,17 @@ exports.updateProfile = async (req, res) => {
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
 
-        // Update data teks
         user.name = name || user.name;
         user.campus = campus || user.campus;
         user.domisili = domisili || user.domisili;
         user.bankName = bankName || user.bankName;
         user.bankAccount = bankAccount || user.bankAccount;
 
-        // Logika Upload File (Avatar & QRIS)
         if (req.files) {
-            // 1. Jika ada upload foto profil (avatar)
             if (req.files.avatar) {
                 const avatarUrl = await uploadToCloudinary(req.files.avatar[0].buffer, 'avatars');
                 user.profilePicture = avatarUrl;
             }
-            // 2. Jika ada upload QRIS
             if (req.files.qris) {
                 const qrisUrl = await uploadToCloudinary(req.files.qris[0].buffer, 'qris_codes');
                 user.qrisUrl = qrisUrl;
