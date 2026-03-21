@@ -1,200 +1,207 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
-import useAuthStore from '../../store/authStore';
-import { 
-    Search, MapPin, Sparkles, 
-    ArrowRight, SlidersHorizontal, PackageSearch
-} from 'lucide-react';
+import { Search, MapPin, Star, Building, ChevronLeft, ChevronRight, X, ArrowRight, CheckCircle2 } from 'lucide-react';
 
 export default function Home() {
-    const [products, setProducts] = useState([]);
-    
-    // STATE KATEGORI DARI DATABASE
-    const [dbCategories, setDbCategories] = useState([]);
-    const [activeCategory, setActiveCategory] = useState('Semua');
-    
+    const navigate = useNavigate();
+    const [topShops, setTopShops] = useState([]);
     const [loading, setLoading] = useState(true);
-    const { user } = useAuthStore();
+
+    // Filter State
+    const [searchKey, setSearchKey] = useState('');
+    const [ratingFilter, setRatingFilter] = useState('0');
+    const [campusFilter, setCampusFilter] = useState('Semua Kampus');
+
+    // Modal Kampus State
+    const [isCampusModalOpen, setIsCampusModalOpen] = useState(false);
+    const [campuses, setCampuses] = useState([]);
+    const [campusPage, setCampusPage] = useState(1);
+    const [campusSearch, setCampusSearch] = useState('');
+    const campusesPerPage = 10;
 
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchHomeData = async () => {
             try {
-                // Fetch Produk
-                const productRes = await api.get('/products');
-                setProducts(productRes.data.data);
-
-                // Fetch Kategori dari Admin (Database)
-                const categoryRes = await api.get('/categories');
-                setDbCategories(categoryRes.data.data);
+                const [shopsRes, campusRes] = await Promise.all([
+                    api.get('/products/top-shops'),
+                    api.get('/products/campuses')
+                ]);
+                setTopShops(shopsRes.data.data);
+                setCampuses(campusRes.data.data);
             } catch (error) {
-                console.error('Gagal memuat data utama', error);
+                console.error("Gagal memuat data home", error);
             } finally {
                 setLoading(false);
             }
         };
-        fetchData();
+        fetchHomeData();
     }, []);
 
-    if (loading) return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-[#F8FAFC]">
-            <div className="relative w-16 h-16">
-                <div className="absolute inset-0 rounded-full border-4 border-slate-200"></div>
-                <div className="absolute inset-0 rounded-full border-4 border-[#00478F] border-t-transparent animate-spin"></div>
-            </div>
-            <p className="mt-6 font-black text-slate-400 tracking-[0.2em] text-[10px] uppercase">Memuat Katalog...</p>
-        </div>
-    );
+    const handleSearchSubmit = (e) => {
+        e.preventDefault();
+        // Arahkan ke halaman Explore dengan Query Parameters
+        navigate(`/explore?search=${searchKey}&campus=${campusFilter}&minRating=${ratingFilter}`);
+    };
 
-    // Gabungkan "Semua" dengan kategori dari Database
-    const categories = ['Semua', ...dbCategories.map(c => c.name)];
+    // Filter & Pagination Kampus
+    const filteredCampuses = campuses.filter(c => c.toLowerCase().includes(campusSearch.toLowerCase()));
+    const totalCampusPages = Math.ceil(filteredCampuses.length / campusesPerPage);
+    const displayedCampuses = filteredCampuses.slice((campusPage - 1) * campusesPerPage, campusPage * campusesPerPage);
 
-    // Sembunyikan barang milik sendiri
-    const catalogProducts = products.filter(p => {
-        const sellerId = p.sellerId?._id || p.sellerId;
-        const myId = user?.id || user?._id;
-        return sellerId !== myId;
-    });
-
-    // Terapkan Filter Kategori
-    const displayedProducts = activeCategory === 'Semua' 
-        ? catalogProducts 
-        : catalogProducts.filter(p => p.category === activeCategory);
-
-    const ProductCard = ({ product }) => (
-        <div className="group bg-white rounded-[2rem] overflow-hidden border border-slate-100 hover:shadow-2xl hover:shadow-[#00478F]/10 hover:-translate-y-1 transition-all duration-500 flex flex-col h-full relative">
-            <div className="relative overflow-hidden aspect-[4/5] bg-slate-50">
-                {product.isPremium && (
-                    <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
-                        <span className="bg-[#FF9500] text-white text-[10px] font-black px-3 py-1.5 rounded-xl shadow-lg flex items-center gap-1.5 uppercase tracking-wider backdrop-blur-md">
-                            <Sparkles size={12} /> Hot Item
-                        </span>
-                    </div>
-                )}
-                <Link to={`/product/${product._id}`}>
-                    {/* PERBAIKAN DI SINI: Memanggil array images[0] */}
-                    <img 
-                        src={(product.images && product.images.length > 0) ? product.images[0] : product.imageUrl} 
-                        alt={product.title} 
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
-                    />
-                </Link>
-                <div className="absolute inset-0 bg-[#00478F]/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none backdrop-blur-[2px]">
-                    <span className="bg-white text-[#00478F] px-6 py-3 rounded-full font-black text-[10px] uppercase tracking-widest transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500 shadow-xl">
-                        Lihat Detail
-                    </span>
-                </div>
-            </div>
-            
-            <div className="p-6 flex flex-col flex-1">
-                <div className="flex justify-between items-center mb-3">
-                    <span className="text-[10px] font-black text-[#FF9500] uppercase tracking-widest bg-[#FF9500]/10 px-2 py-1 rounded-md">
-                        {product.category}
-                    </span>
-                    <span className="flex items-center gap-1 text-slate-400 text-[10px] font-bold truncate max-w-[50%]">
-                        <MapPin size={12} className="shrink-0" /> {product.sellerId?.domisili || 'Area Kampus'}
-                    </span>
-                </div>
-                
-                <Link to={`/product/${product._id}`}>
-                    <h3 className="font-black text-slate-800 text-base line-clamp-2 leading-snug group-hover:text-[#00478F] transition-colors mb-4">{product.title}</h3>
-                </Link>
-                
-                <div className="mt-auto flex items-center justify-between pt-5 border-t border-slate-100">
-                    <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Harga</span>
-                        <span className="font-black text-[#00478F] text-lg leading-none">Rp{product.price.toLocaleString('id-ID')}</span>
-                    </div>
-                    <Link to={`/checkout/${product._id}`} className="w-12 h-12 flex items-center justify-center bg-[#00478F] text-white rounded-2xl hover:bg-[#FF9500] hover:scale-105 active:scale-95 transition-all shadow-lg shadow-blue-900/20">
-                        <ArrowRight size={20} />
-                    </Link>
-                </div>
-            </div>
-        </div>
-    );
+    if (loading) return <div className="flex justify-center items-center min-h-screen"><div className="w-12 h-12 border-4 border-t-[#00478F] border-slate-100 rounded-full animate-spin"></div></div>;
 
     return (
-        <div className="min-h-screen bg-[#F8FAFC]">
-            {/* HERO SECTION */}
-            <header className="relative bg-[#00478F] pt-24 pb-40 px-6 overflow-hidden">
-                <div className="absolute top-0 right-0 w-[30rem] h-[30rem] bg-[#FF9500]/20 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/3"></div>
-                <div className="absolute bottom-0 left-0 w-80 h-80 bg-white/10 rounded-full blur-[80px] -translate-x-1/4 translate-y-1/4"></div>
-
-                <div className="max-w-5xl mx-auto relative z-10 text-center">
-                    <h1 className="text-5xl md:text-7xl font-black text-white mb-6 tracking-tight leading-tight mt-4">
-                        Campus Thrift <span className="text-[#FF9500]">Hub.</span>
+        <div className="min-h-screen bg-[#F8FAFC] pb-32">
+            
+            {/* HERO SECTION DENGAN SMART FILTER */}
+            <div className="bg-[#00478F] pt-24 pb-40 px-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-[100px]"></div>
+                <div className="max-w-4xl mx-auto relative z-10 text-center">
+                    <h1 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight leading-tight">
+                        Cari Barang Thrift dari <span className="text-[#FF9500]">Mahasiswa Terpercaya</span>
                     </h1>
-                    <p className="text-blue-100/90 max-w-2xl mx-auto mb-12 font-medium text-base md:text-lg leading-relaxed">
-                        Platform marketplace eksklusif untuk mahasiswa. Temukan barang pre-loved berkualitas atau ubah barang tak terpakaimu menjadi uang tunai dengan sistem transaksi Escrow yang 100% aman.
-                    </p>
+                    <p className="text-blue-100 mb-10 font-medium">Temukan barang berkualitas dengan sistem keamanan Escrow 100%.</p>
 
-                    <div className="max-w-3xl mx-auto relative group">
-                        <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#00478F] transition-colors">
-                            <Search size={24} />
+                    {/* SMART FILTER BOX */}
+                    <form onSubmit={handleSearchSubmit} className="bg-white p-3 md:p-4 rounded-[2rem] shadow-2xl flex flex-col md:flex-row gap-3">
+                        <div className="flex-1 flex items-center bg-slate-50 rounded-2xl px-4 py-3 border border-transparent focus-within:border-blue-200 transition-colors">
+                            <Search size={20} className="text-slate-400 mr-3 shrink-0" />
+                            <input 
+                                type="text" 
+                                placeholder="Cari jaket, buku, sepatu..." 
+                                value={searchKey} 
+                                onChange={(e) => setSearchKey(e.target.value)}
+                                className="w-full bg-transparent outline-none font-bold text-slate-800"
+                            />
                         </div>
-                        <input type="text" placeholder="Cari sneakers, buku, atau hoodie favoritmu..." className="w-full pl-16 pr-36 py-6 bg-white rounded-full shadow-2xl shadow-[#00478F]/50 text-slate-900 font-bold focus:outline-none focus:ring-4 focus:ring-[#FF9500]/30 transition-all text-base md:text-lg" />
-                        <button className="absolute right-3 top-3 bottom-3 px-8 bg-[#FF9500] text-white font-black rounded-full hover:bg-slate-900 transition-all shadow-lg text-sm md:text-base tracking-wide">
-                            Temukan
-                        </button>
-                    </div>
-                </div>
-            </header>
 
-            {/* FILTER KATEGORI */}
-            <div className="max-w-7xl mx-auto px-6 -translate-y-16 relative z-20">
-                <div className="bg-white p-4 rounded-[2rem] shadow-xl shadow-slate-200/50 flex flex-wrap items-center justify-between gap-4 border border-slate-50">
-                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 md:pb-0 scroll-smooth flex-1">
-                        {categories.map((cat) => (
-                            <button 
-                                key={cat}
-                                onClick={() => setActiveCategory(cat)}
-                                className={`px-6 py-3.5 rounded-xl text-xs font-black transition-all whitespace-nowrap ${
-                                    activeCategory === cat 
-                                    ? 'bg-[#00478F] text-white shadow-lg shadow-blue-900/20' 
-                                    : 'text-slate-500 bg-slate-50 hover:bg-slate-100 hover:text-slate-900'
-                                }`}
-                            >
-                                {cat}
+                        <div className="flex gap-3">
+                            <button type="button" onClick={() => setIsCampusModalOpen(true)} className="flex items-center gap-2 bg-slate-50 px-5 py-3 rounded-2xl border border-slate-100 hover:bg-blue-50 transition-colors">
+                                <Building size={18} className="text-[#00478F] shrink-0" />
+                                <span className="text-sm font-black text-slate-700 truncate max-w-[120px]">{campusFilter}</span>
                             </button>
-                        ))}
-                    </div>
-                    <button className="hidden lg:flex items-center gap-3 px-6 py-3.5 bg-slate-50 rounded-xl text-slate-600 font-black text-xs uppercase tracking-wider hover:bg-slate-100 transition-all border border-slate-200">
-                        <SlidersHorizontal size={16} className="text-[#00478F]" /> Filter Lanjutan
-                    </button>
+
+                            <select value={ratingFilter} onChange={(e) => setRatingFilter(e.target.value)} className="bg-slate-50 px-5 py-3 rounded-2xl border border-slate-100 text-sm font-black text-slate-700 outline-none hover:bg-blue-50 transition-colors cursor-pointer appearance-none">
+                                <option value="0">Semua Rating</option>
+                                <option value="4">⭐ 4.0+</option>
+                                <option value="4.5">⭐ 4.5+</option>
+                                <option value="5">⭐ 5.0</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" className="bg-[#FF9500] text-white px-8 py-3.5 rounded-2xl font-black uppercase tracking-widest text-sm hover:bg-orange-600 transition-all shadow-lg active:scale-95">
+                            Cari Barang
+                        </button>
+                    </form>
                 </div>
             </div>
 
-            {/* MAIN CATALOG CONTENT */}
-            <main className="max-w-7xl mx-auto px-6 pb-32">
-                <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4 mt-8">
-                    <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 bg-[#FF9500]/10 rounded-2xl flex items-center justify-center text-[#FF9500] shadow-inner">
-                            <PackageSearch size={28} strokeWidth={2.5} />
-                        </div>
-                        <div>
-                            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Eksplorasi Katalog</h2>
-                            <p className="text-slate-500 text-sm font-medium mt-1">Koleksi barang thrift terkurasi dari mahasiswa lain.</p>
-                        </div>
+            {/* TOP 5 SHOPS & CATALOG */}
+            <div className="max-w-6xl mx-auto px-4 -mt-20 relative z-20 space-y-12">
+                <div className="flex items-center justify-between bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                    <div>
+                        <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3"><Star className="text-[#FF9500]" fill="currentColor"/> Top 5 Toko Terpopuler</h2>
+                        <p className="text-sm text-slate-500 font-medium mt-1">Berdasarkan akumulasi rating dan jumlah ulasan terbanyak.</p>
                     </div>
+                    <button onClick={() => navigate('/explore')} className="hidden md:flex items-center gap-2 bg-[#00478F] text-white px-6 py-3 rounded-xl font-black text-sm hover:bg-slate-900 transition-colors shadow-lg">
+                        Eksplor Semua Barang <ArrowRight size={16} />
+                    </button>
                 </div>
 
-                {displayedProducts.length === 0 ? (
-                    <div className="bg-white rounded-[3rem] p-24 text-center border border-slate-100 shadow-sm">
-                        <div className="bg-slate-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <Search size={40} className="text-slate-300" />
+                {topShops.map((shop, index) => (
+                    <div key={shop.seller._id} className="bg-white rounded-[2.5rem] p-6 md:p-8 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-slate-100">
+                        {/* Identitas Toko */}
+                        <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-50">
+                            <div className="flex items-center gap-4">
+                                <div className="relative">
+                                    <span className="absolute -top-3 -left-3 w-8 h-8 bg-[#FF9500] text-white font-black flex items-center justify-center rounded-full border-4 border-white shadow-md">#{index + 1}</span>
+                                    <img src={shop.seller.profilePicture || 'https://via.placeholder.com/150'} className="w-16 h-16 rounded-full object-cover ring-2 ring-slate-100" alt={shop.seller.name} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-900 flex items-center gap-1.5">{shop.seller.name} {shop.seller.isVerified && <CheckCircle2 className="text-blue-500" size={16}/>}</h3>
+                                    <div className="flex items-center gap-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-1">
+                                        <span className="flex items-center gap-1"><MapPin size={12}/> {shop.seller.campus}</span>
+                                        <span className="flex items-center gap-1 text-[#FF9500]"><Star size={12} fill="currentColor"/> {shop.seller.rating?.toFixed(1) || 'N/A'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={() => navigate(`/seller/${shop.seller._id}`)} className="text-[#00478F] font-black text-xs uppercase tracking-widest hover:underline underline-offset-4 hidden sm:block">Kunjungi Toko</button>
                         </div>
-                        <h3 className="text-2xl font-black text-slate-800 tracking-tight">Belum ada barang di kategori ini</h3>
-                        <p className="text-slate-500 mt-2 font-medium">Coba cari kategori lain atau jadilah yang pertama menjualnya!</p>
-                        <button onClick={() => setActiveCategory('Semua')} className="inline-block mt-8 px-8 py-4 bg-[#00478F] text-white font-black rounded-2xl hover:bg-[#FF9500] transition-colors shadow-lg">
-                            Tampilkan Semua Barang
-                        </button>
+
+                        {/* Daftar Produk Horizontal */}
+                        <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
+                            {shop.products.map(product => (
+                                <div key={product._id} onClick={() => navigate(`/product/${product._id}`)} className="snap-start shrink-0 w-[200px] bg-slate-50 rounded-3xl overflow-hidden border border-slate-100 hover:border-blue-200 hover:shadow-lg transition-all cursor-pointer group">
+                                    <div className="w-full h-48 overflow-hidden bg-slate-200">
+                                        <img src={(product.images && product.images.length > 0) ? product.images[0] : product.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={product.title} />
+                                    </div>
+                                    <div className="p-4">
+                                        <p className="text-sm font-bold text-slate-800 line-clamp-1 group-hover:text-[#00478F]">{product.title}</p>
+                                        <p className="text-base font-black text-[#00478F] mt-1">Rp{product.price.toLocaleString('id-ID')}</p>
+                                    </div>
+                                </div>
+                            ))}
+                            {/* Card Lihat Lainnya */}
+                            <div onClick={() => navigate(`/seller/${shop.seller._id}`)} className="snap-start shrink-0 w-[150px] bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 hover:border-[#00478F] transition-all text-slate-400 hover:text-[#00478F]">
+                                <ArrowRight size={32} className="mb-2" />
+                                <span className="text-xs font-black uppercase tracking-widest text-center px-4">Lihat Lainnya</span>
+                            </div>
+                        </div>
                     </div>
-                ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                        {displayedProducts.map((product) => <ProductCard key={product._id} product={product} />)}
+                ))}
+
+                <button onClick={() => navigate('/explore')} className="w-full md:hidden flex items-center justify-center gap-2 bg-[#00478F] text-white px-6 py-4 rounded-2xl font-black text-sm hover:bg-slate-900 transition-colors shadow-lg mt-6">
+                    Eksplor Semua Barang Katalog <ArrowRight size={16} />
+                </button>
+            </div>
+
+            {/* ================= MODAL KAMPUS PAGINATION ================= */}
+            {isCampusModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-slate-900">Pilih Kampus</h2>
+                            <button onClick={() => setIsCampusModalOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-red-100 hover:text-red-500 transition-colors"><X size={20}/></button>
+                        </div>
+                        
+                        <div className="relative mb-4">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input type="text" placeholder="Cari nama kampus..." value={campusSearch} onChange={(e) => {setCampusSearch(e.target.value); setCampusPage(1);}} className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-[#00478F]" />
+                        </div>
+
+                        <div className="space-y-2 mb-6 min-h-[300px]">
+                            <button 
+                                onClick={() => { setCampusFilter('Semua Kampus'); setIsCampusModalOpen(false); }}
+                                className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition-colors ${campusFilter === 'Semua Kampus' ? 'bg-[#00478F] text-white' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
+                            >
+                                🌍 Semua Kampus
+                            </button>
+                            {displayedCampuses.map(campus => (
+                                <button 
+                                    key={campus} 
+                                    onClick={() => { setCampusFilter(campus); setIsCampusModalOpen(false); }}
+                                    className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition-colors ${campusFilter === campus ? 'bg-[#00478F] text-white' : 'bg-white border border-slate-100 text-slate-700 hover:border-[#00478F]'}`}
+                                >
+                                    {campus}
+                                </button>
+                            ))}
+                            {displayedCampuses.length === 0 && <p className="text-center text-slate-400 font-bold mt-10">Kampus tidak ditemukan.</p>}
+                        </div>
+
+                        {/* Pagination Kampus */}
+                        {totalCampusPages > 1 && (
+                            <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Hal {campusPage} / {totalCampusPages}</span>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setCampusPage(p => Math.max(1, p - 1))} disabled={campusPage === 1} className="p-2 bg-slate-100 rounded-lg disabled:opacity-50"><ChevronLeft size={18}/></button>
+                                    <button onClick={() => setCampusPage(p => Math.min(totalCampusPages, p + 1))} disabled={campusPage === totalCampusPages} className="p-2 bg-slate-100 rounded-lg disabled:opacity-50"><ChevronRight size={18}/></button>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                )}
-            </main>
+                </div>
+            )}
         </div>
     );
 }

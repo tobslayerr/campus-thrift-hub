@@ -1,4 +1,3 @@
- 
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
@@ -27,7 +26,7 @@ export default function MyTransactions() {
     const [submittingReview, setSubmittingReview] = useState(false);
 
     // ==========================================
-    // STATE BARU: SISTEM LAPORAN
+    // STATE SISTEM LAPORAN
     // ==========================================
     const [showReportModal, setShowReportModal] = useState(false);
     const [reportForm, setReportForm] = useState({ 
@@ -173,10 +172,13 @@ export default function MyTransactions() {
     };
 
     // ==========================================
-    // BADGE STATUS
+    // BADGE STATUS (DENGAN MASKING PEMBELI)
     // ==========================================
-    const getStatusBadge = (status) => {
-        switch (status) {
+    const getStatusBadge = (status, tab) => {
+        // 💡 LOGIKA MASKING: Jika tab pembelian dan status "Dana Dicairkan", tampilkan sebagai "Selesai" saja.
+        const displayStatus = (tab === 'pembelian' && status === 'Dana Dicairkan') ? 'Selesai' : status;
+
+        switch (displayStatus) {
             case 'Menunggu Verifikasi': return <span className="flex items-center gap-1.5 bg-orange-50 text-[#FF9500] px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-orange-200"><Clock size={14} /> Cek Admin</span>;
             case 'Dana Ditahan (Siap COD)': return <span className="flex items-center gap-1.5 bg-[#00478F]/10 text-[#00478F] px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-blue-200"><ShieldCheck size={14} /> Siap COD</span>;
             case 'Selesai': return <span className="flex items-center gap-1.5 bg-purple-50 text-purple-600 px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-purple-200"><Landmark size={14} /> Selesai</span>;
@@ -240,7 +242,7 @@ export default function MyTransactions() {
                                         <Clock size={14} /> 
                                         {new Date(trx.createdAt).toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' })}
                                     </span>
-                                    {getStatusBadge(trx.status)}
+                                    {getStatusBadge(trx.status, activeTab)}
                                 </div>
 
                                 <div className="p-6">
@@ -269,7 +271,7 @@ export default function MyTransactions() {
                                                     </div>
                                                 </div>
                                                 
-                                                {/* TOMBOL LAPORKAN PENGGUNA (BARU) */}
+                                                {/* TOMBOL LAPORKAN PENGGUNA */}
                                                 {opponentData._id && (
                                                     <button 
                                                         onClick={() => {
@@ -452,9 +454,9 @@ export default function MyTransactions() {
             {/* ========================================================= */}
             {showReportModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar">
+                    <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar">
                         <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-black text-red-600 flex items-center gap-2"><Flag size={24}/> Laporkan Pengguna</h2>
+                            <h2 className="text-xl font-black text-red-600 flex items-center gap-2"><AlertTriangle size={24}/> Laporkan Pengguna</h2>
                             <button onClick={() => setShowReportModal(false)} className="text-slate-400 hover:bg-slate-100 p-2 rounded-full"><X size={20}/></button>
                         </div>
                         

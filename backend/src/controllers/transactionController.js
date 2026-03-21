@@ -138,7 +138,8 @@ exports.getAllTransactions = async (req, res) => {
         const transactions = await Transaction.find()
             .populate('productId', 'title price images imageUrl')
             .populate('buyerId', 'name email')
-            .populate('sellerId', 'name bankName bankAccount qrisUrl')
+            // 👇 TAMBAHKAN bankAccountName DI BAWAH INI
+            .populate('sellerId', 'name bankName bankAccount bankAccountName qrisUrl') 
             .sort({ createdAt: -1 });
 
         res.status(200).json({ success: true, data: transactions });

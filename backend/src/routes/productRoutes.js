@@ -1,26 +1,36 @@
 const express = require('express');
 const router = express.Router();
-
-// Pastikan import ini namanya sama persis dengan yang di-eksport controller
-const { 
-    createProduct, 
-    getProducts, 
-    getProductById, 
-    updateProduct, 
-    deleteProduct 
-} = require('../controllers/productController');
-
-const { upload } = require('../middlewares/upload');
-const antiFraudFilter = require('../middlewares/antiFraud');
+const productController = require('../controllers/productController');
 const { protect } = require('../middlewares/authMiddleware');
 
-// Route Publik
-router.get('/', getProducts);
-router.get('/:id', getProductById);
+// Setup multer memory storage (Untuk upload gambar)
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 
-// Route Terproteksi
-router.post('/', protect, upload.array('images', 5), antiFraudFilter, createProduct);
-router.put('/:id', protect, upload.array('images', 5), antiFraudFilter, updateProduct);
-router.delete('/:id', protect, deleteProduct);
+// ==========================================
+// 🌟 RUTE PUBLIK STATIS (HARUS DI ATAS)
+// ==========================================
+router.get('/top-shops', productController.getTopShops);
+router.get('/campuses', productController.getCampuses);
+router.get('/', productController.getProducts);
+
+// Rute Profil Penjual (Ambil semua barang milik penjual X)
+router.get('/seller/:id', productController.getSellerProducts);
+
+// ==========================================
+// 🌟 RUTE PUBLIK DINAMIS (HARUS DI BAWAH)
+// ==========================================
+// Rute ini harus paling bawah dari deretan GET publik agar tidak menabrak rute lain
+router.get('/:id', productController.getProductById);
+
+// ==========================================
+// 🔒 RUTE TERPROTEKSI (MEMBUTUHKAN LOGIN)
+// ==========================================
+router.post('/', protect, upload.array('images', 5), productController.createProduct);
+
+// 🛠️ RUTE SELLER TOOLS
+router.put('/:id', protect, upload.array('images', 5), productController.updateProduct);
+router.delete('/:id', protect, productController.deleteProduct);
+router.put('/:id/sold', protect, productController.markAsSold);
 
 module.exports = router;

@@ -1,14 +1,7 @@
 import { Link } from 'react-router-dom';
 import { 
-    ShieldCheck, 
-    Smartphone, 
-    Search, 
-    Wallet, 
-    Handshake, 
-    CheckCircle2, 
-    Lock, 
-    ArrowRight,
-    Info
+    ShieldCheck, Smartphone, Search, Wallet, Handshake, 
+    Lock, ArrowRight, Info, Percent
 } from 'lucide-react';
 
 export default function HowItWorks() {
@@ -116,6 +109,38 @@ export default function HowItWorks() {
                 </div>
             </section>
 
+            {/* --- STRUKTUR BIAYA LAYANAN (BARU) --- */}
+            <section className="max-w-5xl mx-auto px-6 mt-12">
+                <div className="bg-white border border-slate-200 shadow-sm rounded-[3rem] p-8 md:p-12 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-40 h-40 bg-blue-50 rounded-full translate-x-1/2 -translate-y-1/2"></div>
+                    <div className="relative z-10">
+                        <h2 className="text-2xl font-black text-slate-900 mb-4 flex items-center gap-4">
+                            <div className="w-12 h-12 bg-blue-100 text-[#00478F] rounded-2xl flex items-center justify-center">
+                                <Percent size={24} />
+                            </div>
+                            Struktur Biaya Layanan
+                        </h2>
+                        <p className="text-slate-500 font-medium mb-8 max-w-2xl leading-relaxed">
+                            Bagi <strong>Pembeli</strong>, layanan ini 100% GRATIS tanpa biaya tambahan. <br/> 
+                            Bagi <strong>Penjual</strong>, kami menerapkan potongan admin yang sangat kecil dari total penjualan untuk menjaga server dan sistem keamanan Escrow tetap berjalan.
+                        </p>
+                        
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+                                <h4 className="font-black text-slate-800 text-xl mb-2">Barang ≤ Rp 100.000</h4>
+                                <p className="text-sm text-slate-500 mb-6 font-medium">Berlaku untuk produk dengan harga di bawah atau pas 100 ribu.</p>
+                                <div className="text-4xl font-black text-[#FF9500]">Potongan 5%</div>
+                            </div>
+                            <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+                                <h4 className="font-black text-slate-800 text-xl mb-2">Barang &gt; Rp 100.000</h4>
+                                <p className="text-sm text-slate-500 mb-6 font-medium">Berlaku untuk produk premium dengan harga di atas 100 ribu.</p>
+                                <div className="text-4xl font-black text-[#FF9500]">Potongan 10%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             {/* --- IMPORTANT NOTE / WARNING --- */}
             <section className="max-w-5xl mx-auto px-6 mt-12">
                 <div className="bg-[#FF9500]/10 border-2 border-dashed border-[#FF9500]/30 rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center gap-6">
@@ -125,7 +150,7 @@ export default function HowItWorks() {
                     <div>
                         <h4 className="font-black text-[#FF9500] text-xl mb-1 uppercase tracking-tight">Peringatan Penting!</h4>
                         <p className="text-slate-600 font-bold text-sm leading-relaxed">
-                            Jangan pernah memberikan <span className="text-[#00478F]">PIN Rahasia</span> kepada penjual melalui Chat atau WhatsApp sebelum Anda memegang fisik barangnya. PIN adalah kunci uang Anda.
+                            Jangan pernah memberikan <span className="text-[#00478F]">PIN Rahasia</span> kepada penjual melalui Chat atau WhatsApp sebelum Anda memegang fisik barangnya. PIN adalah kunci pencairan uang Anda.
                         </p>
                     </div>
                 </div>
@@ -135,7 +160,7 @@ export default function HowItWorks() {
             <section className="max-w-4xl mx-auto px-6 mt-24 text-center">
                 <h2 className="text-3xl font-black text-slate-900 mb-6">Siap berburu barang hits?</h2>
                 <div className="flex flex-col md:flex-row gap-4 justify-center">
-                    <Link to="/" className="px-10 py-5 bg-[#00478F] text-white font-black rounded-2xl shadow-xl shadow-blue-900/20 hover:bg-[#FF9500] hover:scale-105 transition-all active:scale-95 flex items-center justify-center gap-2">
+                    <Link to="/explore" className="px-10 py-5 bg-[#00478F] text-white font-black rounded-2xl shadow-xl shadow-blue-900/20 hover:bg-[#FF9500] hover:scale-105 transition-all active:scale-95 flex items-center justify-center gap-2">
                         Mulai Belanja <ArrowRight size={20} />
                     </Link>
                     <Link to="/upload" className="px-10 py-5 bg-white text-[#00478F] font-black rounded-2xl border-2 border-slate-200 hover:border-[#00478F] transition-all flex items-center justify-center gap-2">

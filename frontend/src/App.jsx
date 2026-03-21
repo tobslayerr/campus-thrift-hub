@@ -9,6 +9,7 @@ import UploadProduct from './pages/seller/UploadProduct';
 import Checkout from './pages/buyer/Checkout';
 import ProductDetail from './pages/buyer/ProductDetail';
 import SellerProfile from './pages/buyer/SellerProfile';
+import Explore from './pages/buyer/Explore'; 
 import MyProfile from './pages/user/MyProfile';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminLogin from './pages/admin/AdminLogin';
@@ -16,30 +17,37 @@ import ChatRoom from './pages/user/ChatRoom';
 import ChatList from './pages/user/ChatList';
 import MyTransactions from './pages/user/MyTransactions';
 import HowItWorks from './pages/HowItWorks';
+import About from './pages/About'; 
 import BannedPage from './pages/user/BannedPage';
-import Notifications from './pages/user/Notifications'; // <-- TAMBAHAN IMPORT
+import Notifications from './pages/user/Notifications';
+
+// ---> 1. IMPORT DUA HALAMAN BARU DI SINI <---
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsAndConditions from './pages/TermsAndConditions';
 
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
 import AdminNavbar from './components/AdminNavbar';
+import Footer from './components/Footer'; 
 
-// Layout Switcher
 function LayoutManager({ children }) {
     const location = useLocation();
+    
     const isAdminDashboard = location.pathname.startsWith('/admin');
     const isAdminLogin = location.pathname.startsWith('/portal-auth-admin');
     const isBannedArea = location.pathname === '/banned';
+    const isLoginRegister = location.pathname === '/login' || location.pathname === '/register';
 
-    // Jika di Admin Dashboard, biarkan Dashboard.jsx mengurus Sidebar-nya sendiri
     if (isAdminDashboard) {
         return <main className="font-sans bg-slate-50 text-slate-900 min-h-screen">{children}</main>;
     }
 
     return (
-        <div className={isAdminLogin ? "min-h-screen bg-slate-50 font-sans" : "min-h-screen bg-brand-light font-sans text-gray-900"}>
+        <div className={isAdminLogin ? "min-h-screen bg-slate-50 font-sans flex flex-col" : "min-h-screen bg-brand-light font-sans text-gray-900 flex flex-col"}>
             {!isBannedArea && (isAdminLogin ? <AdminNavbar /> : <Navbar />)}
-            <main>{children}</main>
+            <main className="flex-grow">{children}</main>
+            {!isBannedArea && !isAdminLogin && !isLoginRegister && <Footer />}
         </div>
     );
 }
@@ -55,12 +63,18 @@ function App() {
         <LayoutManager>
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/explore" element={<Explore />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/seller/:id" element={<SellerProfile />} />
             <Route path="/how-it-works" element={<HowItWorks />} />
+            <Route path="/about" element={<About />} /> 
             <Route path="/banned" element={<BannedPage />} />
+
+            {/* ---> 2. TAMBAHKAN ROUTE DI SINI <--- */}
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsAndConditions />} />
 
             <Route path="/upload" element={<ProtectedRoute><UploadProduct /></ProtectedRoute>} />
             <Route path="/checkout/:id" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
@@ -69,7 +83,7 @@ function App() {
             <Route path="/chats" element={<ProtectedRoute><ChatList /></ProtectedRoute>} />
             <Route path="/transactions" element={<ProtectedRoute><MyTransactions /></ProtectedRoute>} />
             <Route path="/edit-product/:id" element={<ProtectedRoute><UploadProduct /></ProtectedRoute>} />
-            <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} /> {/* <-- TAMBAHAN ROUTE */}
+            <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
             
             <Route path="/portal-auth-admin-x7y9z-2026" element={<AdminLogin />} />
             <Route path="/admin" element={<ProtectedRoute requireAdmin={true}><AdminDashboard /></ProtectedRoute>} />

@@ -8,9 +8,9 @@ import useAdminAuthStore from '../../store/adminAuthStore';
 import toast from 'react-hot-toast';
 import { 
     Tags, Plus, Trash2, LayoutDashboard, Edit2, X, Check, 
-    ArrowLeftRight, CheckCircle, ExternalLink, Clock, DollarSign, 
-    AlertCircle, ShieldCheck, Wallet, CreditCard, Building, ImagePlus, QrCode,
-    Users, Flag, ShieldBan, Menu, LogOut, ChevronLeft, ChevronRight, Eye, User, ImageIcon
+    ArrowLeftRight,
+    AlertCircle, ShieldCheck, CreditCard, Building, ImagePlus, QrCode,
+    Users, Flag, ShieldBan, Menu, LogOut, ChevronLeft, ChevronRight, Eye, User, ImageIcon, HelpCircle, Loader2
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -21,11 +21,20 @@ export default function Dashboard() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('transaksi'); 
     const [loading, setLoading] = useState(true);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
     // Reset pagination ketika ganti tab
     useEffect(() => { setCurrentPage(1); }, [activeTab]);
+
+    // ================= STATE KONFIRMASI MODAL (PENGGANTI WINDOW.CONFIRM) =================
+    const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDanger: false });
+
+    const openConfirm = (title, message, onConfirm, isDanger = false) => {
+        setConfirmDialog({ isOpen: true, title, message, onConfirm, isDanger });
+    };
+    const closeConfirm = () => setConfirmDialog({ ...confirmDialog, isOpen: false });
 
     // ================= STATE DATA =================
     const [categories, setCategories] = useState([]);
@@ -59,13 +68,8 @@ export default function Dashboard() {
     const fetchPaymentMethods = async () => { try { const res = await api.get('/payment-methods'); setPaymentMethods(res.data.data || []); } catch (e) { toast.error("Gagal memuat rekening"); } };
     const fetchReports = async () => { try { const res = await api.get('/reports'); setReports(res.data.data || []); } catch (e) { toast.error("Gagal memuat laporan"); } };
     const fetchUsers = async () => { 
-        try { 
-            const res = await api.get('/users/admin/all'); 
-            setUsers(res.data.data || []); 
-        } catch (e) { 
-            toast.error("Gagal memuat pengguna"); 
-            setUsers([]); 
-        } 
+        try { const res = await api.get('/users/admin/all'); setUsers(res.data.data || []); } 
+        catch (e) { toast.error("Gagal memuat pengguna"); setUsers([]); } 
     };
 
     useEffect(() => {
@@ -79,28 +83,41 @@ export default function Dashboard() {
     }, [activeTab]);
 
     // ================= HANDLERS =================
-    const handleLogout = () => { logoutAdmin(); navigate('/portal-auth-admin-x7y9z-2026'); };
+    const handleLogout = () => { 
+        setIsLoggingOut(true);
+        toast.loading("Mempersiapkan keluar sistem...", { id: 'logout' });
+        setTimeout(() => {
+            toast.success("Sesi Otoritas Berakhir", { id: 'logout' });
+            logoutAdmin(); 
+            navigate('/portal-auth-admin-x7y9z-2026'); 
+        }, 1500);
+    };
     
-    const handleVerifyPayment = async (id) => {
-        if (!window.confirm("Verifikasi uang masuk?")) return;
-        const toastId = toast.loading('Memverifikasi...');
-        try { await api.put(`/transactions/${id}/status`, { status: 'Dana Ditahan (Siap COD)' }); toast.success('Berhasil!', { id: toastId }); fetchTransactions(); } 
-        catch (e) { toast.error('Gagal', { id: toastId }); }
+    const handleVerifyPayment = (id) => {
+        openConfirm(
+            "Verifikasi Uang Masuk",
+            "Apakah Anda yakin dana sudah masuk ke rekening sistem? Aksi ini akan mengubah status transaksi menjadi siap COD.",
+            async () => {
+                const toastId = toast.loading('Memverifikasi...');
+                try { await api.put(`/transactions/${id}/status`, { status: 'Dana Ditahan (Siap COD)' }); toast.success('Berhasil!', { id: toastId }); fetchTransactions(); } 
+                catch (e) { toast.error('Gagal', { id: toastId }); }
+            }
+        );
     };
 
-    const handleDisburseFunds = async (id) => {
-        if (!window.confirm("Cairkan dana ke penjual?")) return;
-        const toastId = toast.loading('Mencairkan...');
-        try { await api.put(`/transactions/${id}/disburse`); toast.success('Berhasil!', { id: toastId }); fetchTransactions(); } 
-        catch (e) { 
-            try { 
-                await api.put(`/transactions/${id}/status`, { status: 'Dana Dicairkan' }); 
-                toast.success('Berhasil!', { id: toastId }); 
-                fetchTransactions(); 
-            } catch (err) { 
-                toast.error('Gagal', { id: toastId }); 
-            } 
-        }
+    const handleDisburseFunds = (id) => {
+        openConfirm(
+            "Cairkan Dana ke Penjual",
+            "Pastikan Anda telah mentransfer dana ke rekening penjual. Konfirmasi ini akan mengakhiri siklus transaksi secara permanen.",
+            async () => {
+                const toastId = toast.loading('Memproses pencairan...');
+                try { await api.put(`/transactions/${id}/disburse`); toast.success('Berhasil dicairkan!', { id: toastId }); fetchTransactions(); } 
+                catch (e) { 
+                    try { await api.put(`/transactions/${id}/status`, { status: 'Dana Dicairkan' }); toast.success('Berhasil dicairkan!', { id: toastId }); fetchTransactions(); } 
+                    catch (err) { toast.error('Gagal', { id: toastId }); } 
+                }
+            }
+        );
     };
 
     const handleBanUser = async (e) => {
@@ -110,11 +127,16 @@ export default function Dashboard() {
         catch (e) { toast.error("Gagal memblokir", { id: toastId }); }
     };
 
-    const handleUnban = async (id) => {
-        if (!window.confirm("Cabut blokir?")) return;
-        const toastId = toast.loading("Mencabut...");
-        try { await api.put(`/users/admin/ban/${id}`, { isBanned: false }); toast.success("Blokir dicabut!", { id: toastId }); fetchUsers(); } 
-        catch (e) { toast.error("Gagal", { id: toastId }); }
+    const handleUnban = (id) => {
+        openConfirm(
+            "Cabut Blokir Akun",
+            "Pengguna ini akan diberikan kembali akses ke sistem Campus Thrift Hub. Anda yakin?",
+            async () => {
+                const toastId = toast.loading("Mencabut blokir...");
+                try { await api.put(`/users/admin/ban/${id}`, { isBanned: false }); toast.success("Blokir dicabut!", { id: toastId }); fetchUsers(); } 
+                catch (e) { toast.error("Gagal", { id: toastId }); }
+            }
+        );
     };
 
     const handleUpdateReport = async (e) => {
@@ -129,8 +151,14 @@ export default function Dashboard() {
         try { await api.post('/categories', { name: newCategory }); setNewCategory(''); fetchCategories(); toast.success('Kategori ditambah!'); } catch (e) { /* empty */ }
     };
 
-    const handleDeleteCategory = async (id) => {
-        if (window.confirm("Hapus kategori?")) { await api.delete(`/categories/${id}`); fetchCategories(); toast.success('Kategori dihapus!'); }
+    const handleDeleteCategory = (id) => {
+        openConfirm(
+            "Hapus Kategori",
+            "Kategori yang dihapus tidak bisa dikembalikan. Lanjutkan?",
+            async () => {
+                await api.delete(`/categories/${id}`); fetchCategories(); toast.success('Kategori dihapus!');
+            }, true
+        );
     };
 
     const saveEdit = async (id) => {
@@ -160,13 +188,17 @@ export default function Dashboard() {
             setQrFile(null); 
             setQrPreview(null); 
             fetchPaymentMethods(); 
-        } catch (e) { 
-            toast.error("Gagal", {id: tid}); 
-        }
+        } catch (e) { toast.error("Gagal", {id: tid}); }
     };
 
-    const handleDeleteBank = async (id) => {
-        if (window.confirm("Hapus rekening?")) { await api.delete(`/payment-methods/${id}`); fetchPaymentMethods(); toast.success('Dihapus!'); }
+    const handleDeleteBank = (id) => {
+        openConfirm(
+            "Hapus Rekening Escrow",
+            "Apakah Anda yakin ingin menghapus rekening ini? Ini akan menghilangkan metode pembayaran ini bagi pembeli baru.",
+            async () => {
+                await api.delete(`/payment-methods/${id}`); fetchPaymentMethods(); toast.success('Dihapus!');
+            }, true
+        );
     };
 
     // ================= PAGINATION HELPER =================
@@ -192,8 +224,25 @@ export default function Dashboard() {
     const displayedPaymentMethods = paymentMethods.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     return (
-        <div className="flex h-screen bg-slate-50 overflow-hidden">
+        <div className="flex h-screen bg-slate-50 overflow-hidden relative">
             
+            {/* CUSTOM CONFIRMATION MODAL */}
+            {confirmDialog.isOpen && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2rem] p-8 max-w-sm w-full shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300">
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 mx-auto ${confirmDialog.isDanger ? 'bg-red-50 text-red-500' : 'bg-blue-50 text-[#00478F]'}`}>
+                            {confirmDialog.isDanger ? <AlertCircle size={32} /> : <HelpCircle size={32} />}
+                        </div>
+                        <h2 className="text-xl font-black text-slate-900 text-center mb-2">{confirmDialog.title}</h2>
+                        <p className="text-sm font-medium text-slate-500 text-center mb-8 leading-relaxed">{confirmDialog.message}</p>
+                        <div className="flex gap-3">
+                            <button onClick={closeConfirm} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Batal</button>
+                            <button onClick={() => { confirmDialog.onConfirm(); closeConfirm(); }} className={`flex-1 py-3 text-white rounded-xl font-black shadow-lg hover:-translate-y-0.5 transition-all ${confirmDialog.isDanger ? 'bg-red-500 shadow-red-500/20 hover:bg-red-600' : 'bg-[#00478F] shadow-[#00478F]/20 hover:bg-slate-900'}`}>Ya, Lanjutkan</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* SIDEBAR */}
             {isSidebarOpen && (
                 <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)}></div>
@@ -201,9 +250,14 @@ export default function Dashboard() {
 
             <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 text-white transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:flex lg:flex-col shadow-2xl`}>
                 <div className="flex items-center justify-between p-6 border-b border-slate-800">
-                    <div className="flex items-center gap-3">
-                        <ShieldCheck className="text-[#FF9500]" size={28} />
-                        <span className="text-lg font-black tracking-widest text-slate-100">THRIFT<span className="text-[#FF9500]">ADMIN</span></span>
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-gradient-to-tr from-[#00478F] to-[#FF9500] rounded-xl flex items-center justify-center shadow-lg">
+                            <ShieldCheck className="text-white" size={24} />
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[11px] font-black tracking-widest text-slate-400 uppercase">System Otoritas</span>
+                            <span className="text-sm font-black tracking-tight text-white leading-none mt-1">Campus Thrift Hub</span>
+                        </div>
                     </div>
                     <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white p-1 rounded-md bg-slate-800"><X size={20}/></button>
                 </div>
@@ -227,20 +281,24 @@ export default function Dashboard() {
                 </nav>
 
                 <div className="p-4 border-t border-slate-800">
-                    <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white px-4 py-3 rounded-xl font-bold transition-colors border border-red-500/20 text-sm">
-                        <LogOut size={16} /> Keluar
+                    <button onClick={handleLogout} disabled={isLoggingOut} className="w-full flex items-center justify-center gap-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white px-4 py-3.5 rounded-xl font-bold transition-all border border-red-500/20 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                        {isLoggingOut ? <><Loader2 size={16} className="animate-spin" /> Memutus Sesi...</> : <><LogOut size={16} /> Keluar</>}
                     </button>
                 </div>
             </aside>
 
             {/* MAIN CONTENT */}
             <div className="flex-1 flex flex-col h-screen overflow-hidden">
-                <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm z-10 shrink-0">
+                <header className="bg-white border-b border-slate-200 px-6 py-5 flex items-center justify-between shadow-sm z-10 shrink-0">
                     <div className="flex items-center gap-4">
                         <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 -ml-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200"><Menu size={24} /></button>
                         <h1 className="text-xl md:text-2xl font-black text-slate-800 capitalize tracking-tight flex items-center gap-2">
                             <LayoutDashboard className="text-[#00478F] hidden md:block" size={24} /> {activeTab}
                         </h1>
+                    </div>
+                    <div className="hidden md:flex items-center gap-3 bg-slate-50 border border-slate-200 px-4 py-2 rounded-full">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Admin Online</span>
                     </div>
                 </header>
 
@@ -255,21 +313,20 @@ export default function Dashboard() {
                                 <div className="space-y-6 animate-in fade-in duration-500">
                                     <div className="flex flex-wrap gap-2 mb-6">
                                         {['Semua', 'Menunggu Verifikasi', 'Dana Ditahan (Siap COD)', 'Selesai', 'Dana Dicairkan'].map(status => (
-                                            <button key={status} onClick={() => {setStatusFilter(status); setCurrentPage(1);}} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === status ? 'bg-[#00478F] text-white shadow-md' : 'bg-white text-slate-400 border border-slate-200'}`}>{status}</button>
+                                            <button key={status} onClick={() => {setStatusFilter(status); setCurrentPage(1);}} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === status ? 'bg-[#00478F] text-white shadow-md' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}>{status}</button>
                                         ))}
                                     </div>
                                     
                                     {displayedTransactions.length === 0 ? (
-                                        <div className="bg-white p-12 rounded-[2.5rem] text-center border border-slate-200 shadow-sm"><ShieldCheck size={48} className="mx-auto text-slate-100 mb-4" /><h3 className="text-lg font-bold text-slate-400 uppercase tracking-widest">Tidak ada data</h3></div>
+                                        <div className="bg-white p-12 rounded-[2.5rem] text-center border border-slate-200 shadow-sm"><ShieldCheck size={48} className="mx-auto text-slate-200 mb-4" /><h3 className="text-lg font-bold text-slate-400 uppercase tracking-widest">Tidak ada data</h3></div>
                                     ) : (
                                         <>
                                             <div className="grid gap-6">
                                                 {displayedTransactions.map((trx) => {
-                                                    // Logika Teks Metode Pembayaran
                                                     const isQRISMethod = trx.paymentMethod?.toLowerCase().includes('qris');
                                                     
                                                     return (
-                                                        <div key={trx._id} className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col lg:flex-row lg:items-start justify-between gap-8 hover:border-[#FF9500] transition-all group">
+                                                        <div key={trx._id} className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.02)] flex flex-col lg:flex-row lg:items-start justify-between gap-8 hover:border-[#00478F]/30 transition-all group">
                                                             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8">
                                                                 <div>
                                                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Informasi Barang</span>
@@ -284,7 +341,7 @@ export default function Dashboard() {
                                                                 <div className="flex flex-col gap-6">
                                                                     {/* Metode Bayar Pembeli */}
                                                                     <div className="bg-slate-50 border border-slate-100 p-4 rounded-3xl relative overflow-hidden">
-                                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2 block">Metode Pembayaran</span>
+                                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2 block">Pembayaran Pembeli</span>
                                                                         <div className={`px-4 py-2 rounded-xl border shadow-sm inline-block text-xs font-black uppercase tracking-widest ${isQRISMethod ? 'bg-orange-500 text-white border-orange-400' : 'bg-[#00478F] text-white border-blue-900'}`}>
                                                                             {isQRISMethod ? 'QRIS' : trx.paymentMethod || 'BANK'}
                                                                         </div>
@@ -292,30 +349,30 @@ export default function Dashboard() {
 
                                                                     {/* Info Pencairan Dana */}
                                                                     {(trx.status === 'Selesai' || trx.status === 'Dana Dicairkan') && trx.sellerId && (
-                                                                        <div className="p-5 bg-blue-900 text-white rounded-[2rem] shadow-xl border border-blue-800">
-                                                                            <span className="text-[9px] font-black text-blue-300 uppercase tracking-[0.2em] mb-3 block">Rekening Pencairan Penjual</span>
+                                                                        <div className="p-5 bg-slate-900 text-white rounded-[2rem] shadow-xl border border-slate-800">
+                                                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block">Tujuan Pencairan (Penjual)</span>
                                                                             {trx.sellerId.qrisUrl ? (
                                                                                 <div className="flex items-center gap-4">
                                                                                     <div className="relative group/qr">
-                                                                                        <img src={trx.sellerId.qrisUrl} className="w-16 h-16 object-contain rounded-xl bg-white p-1 border-2 border-blue-300" alt="QR"/>
+                                                                                        <img src={trx.sellerId.qrisUrl} className="w-16 h-16 object-contain rounded-xl bg-white p-1 border-2 border-slate-700" alt="QR"/>
                                                                                         <button onClick={() => window.open(trx.sellerId.qrisUrl, '_blank')} className="absolute inset-0 bg-black/40 opacity-0 group-hover/qr:opacity-100 rounded-xl flex items-center justify-center transition-opacity"><Eye size={16}/></button>
                                                                                     </div>
                                                                                     <div>
                                                                                         <p className="font-black text-sm text-white">SCAN QRIS</p>
-                                                                                        <p className="text-[10px] text-blue-300 uppercase font-bold">Pencairan via Gambar</p>
+                                                                                        <p className="text-[10px] text-slate-400 uppercase font-bold">Pencairan via Gambar</p>
                                                                                     </div>
                                                                                 </div>
                                                                             ) : trx.sellerId.bankName ? (
                                                                                 <div className="space-y-1">
                                                                                     <p className="font-black text-white text-base leading-tight">{trx.sellerId.bankName}</p>
-                                                                                    <p className="font-mono font-black text-blue-200 text-sm tracking-widest">{trx.sellerId.bankAccount}</p>
+                                                                                    <p className="font-mono font-black text-blue-400 text-sm tracking-widest">{trx.sellerId.bankAccount}</p>
                                                                                     <div className="mt-2 pt-2 border-t border-white/10 flex items-center gap-2">
-                                                                                        <User size={12} className="text-blue-300"/>
-                                                                                        <p className="text-[10px] font-black text-white uppercase tracking-widest">A.N: {trx.sellerId.bankAccountName || 'BELUM DIISI'}</p>
+                                                                                        <User size={12} className="text-slate-400"/>
+                                                                                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">A.N: {trx.sellerId.bankAccountName || 'BELUM DIISI'}</p>
                                                                                     </div>
                                                                                 </div>
                                                                             ) : (
-                                                                                <span className="text-xs text-red-300 font-bold flex items-center gap-2"><AlertCircle size={14}/> Belum diatur penjual.</span>
+                                                                                <span className="text-xs text-red-400 font-bold flex items-center gap-2"><AlertCircle size={14}/> Belum diatur penjual.</span>
                                                                             )}
                                                                         </div>
                                                                     )}
@@ -453,7 +510,7 @@ export default function Dashboard() {
                                                     <div className="space-y-4">
                                                         <div><label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Bank</label><input required type="text" value={newBank.bankName} onChange={e=>setNewBank({...newBank, bankName:e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-transparent focus:bg-white focus:border-[#00478F] font-bold text-sm outline-none transition-all" placeholder="Misal: BCA"/></div>
                                                         <div><label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">No Rekening</label><input required type="text" value={newBank.accountNumber} onChange={e=>setNewBank({...newBank, accountNumber:e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-transparent focus:bg-white focus:border-[#00478F] font-bold text-sm outline-none transition-all" placeholder="12345678"/></div>
-                                                        <div><label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Atas Nama</label><input required type="text" value={newBank.bankAccountName} onChange={e=>setNewBank({...newBank, ownerName:e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-transparent focus:bg-white focus:border-[#00478F] font-bold text-sm outline-none transition-all" placeholder="Admin Hub"/></div>
+                                                        <div><label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Atas Nama</label><input required type="text" value={newBank.ownerName} onChange={e=>setNewBank({...newBank, ownerName:e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border border-transparent focus:bg-white focus:border-[#00478F] font-bold text-sm outline-none transition-all" placeholder="Admin Hub"/></div>
                                                     </div>
                                                 ) : (
                                                     <div className="border-4 border-dashed border-slate-100 rounded-[2.5rem] p-8 bg-slate-50 flex flex-col items-center group hover:border-blue-200 transition-all cursor-pointer relative overflow-hidden">
@@ -480,7 +537,7 @@ export default function Dashboard() {
                                             <h3 className="font-black text-slate-800 mb-10 flex items-center gap-3 text-lg"><Building size={24} className="text-[#00478F]" /> Rekening Aktif Sistem</h3>
                                             <div className="grid sm:grid-cols-2 gap-8">
                                                 {displayedPaymentMethods.map((method) => (
-                                                    <div key={method._id} className="bg-[#00478F] p-8 rounded-[2rem] relative group overflow-hidden shadow-2xl shadow-blue-900/20 border-b-8 border-blue-900">
+                                                    <div key={method._id} className="bg-gradient-to-br from-[#00478F] to-slate-900 p-8 rounded-[2rem] relative group overflow-hidden shadow-2xl shadow-blue-900/20 border border-blue-800">
                                                         <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
                                                         <div className="absolute top-6 right-6 bg-white/10 text-white px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest">{method.bankName}</div>
                                                         {method.qrImageUrl ? (
@@ -491,7 +548,7 @@ export default function Dashboard() {
                                                         ) : (
                                                             <div className="mt-6">
                                                                 <p className="text-2xl font-mono font-black text-white tracking-[0.15em] mb-1">{method.accountNumber}</p>
-                                                                <p className="text-[10px] font-black text-blue-300 uppercase tracking-widest">a.n {method.ba}</p>
+                                                                <p className="text-[10px] font-black text-blue-300 uppercase tracking-widest">a.n {method.ownerName}</p>
                                                                 <div className="mt-8 flex items-center gap-2 opacity-30"><CreditCard size={20} className="text-white"/><span className="text-[8px] font-black text-white uppercase tracking-[0.3em]">Official Escrow</span></div>
                                                             </div>
                                                         )}
@@ -546,7 +603,7 @@ export default function Dashboard() {
                 </main>
             </div>
 
-            {/* MODAL BAN USER */}
+            {/* MODAL BAN USER (GAYA BARU) */}
             {showBanModal && selectedUser && (
                 <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="bg-white rounded-[3rem] p-10 max-w-md w-full shadow-2xl border border-slate-100 animate-in zoom-in-95">
@@ -562,13 +619,13 @@ export default function Dashboard() {
                         <form onSubmit={handleBanUser} className="space-y-6">
                             <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">Durasi Penangguhan</label><select value={banForm.duration} onChange={(e) => setBanForm({...banForm, duration: e.target.value})} className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-red-500 rounded-2xl font-black text-sm outline-none transition-all"><option value="0">PERMANEN</option><option value="3">3 HARI</option><option value="7">7 HARI</option><option value="30">30 HARI</option></select></div>
                             <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">Justifikasi Admin</label><textarea required value={banForm.reason} onChange={(e) => setBanForm({...banForm, reason: e.target.value})} placeholder="Sebutkan alasan detail..." className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent focus:border-red-500 rounded-2xl font-bold text-sm outline-none transition-all min-h-[120px]"></textarea></div>
-                            <button type="submit" className="w-full py-5 bg-red-600 text-white font-black rounded-[1.5rem] hover:bg-slate-900 uppercase tracking-[0.2em] text-xs shadow-xl shadow-red-900/20 active:scale-95 transition-all mt-4">Eksekusi Penalti Akun</button>
+                            <button type="submit" className="w-full py-5 bg-red-600 text-white font-black rounded-[1.5rem] hover:bg-slate-900 uppercase tracking-[0.2em] text-xs shadow-xl shadow-red-900/20 active:scale-95 transition-all mt-4">Eksekusi Penalti</button>
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* MODAL PROSES LAPORAN */}
+            {/* MODAL PROSES LAPORAN (GAYA BARU) */}
             {showReportModal && selectedReport && (
                 <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="bg-white rounded-[3rem] p-10 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar animate-in zoom-in-95 border border-slate-100">
