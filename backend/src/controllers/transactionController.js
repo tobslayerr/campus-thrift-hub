@@ -214,7 +214,11 @@ exports.verifyCodPin = async (req, res) => {
 
         transaction.status = 'Selesai';
         await transaction.save();
-
+        
+        await Product.findByIdAndUpdate(transaction.productId, { 
+            status: 'Terjual',
+            stock: 0 // Pastikan stok nol
+        });
         const product = await Product.findByIdAndUpdate(transaction.productId, { status: 'Selesai' });
         const productTitle = product ? product.title : 'Barang';
 

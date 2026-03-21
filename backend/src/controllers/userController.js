@@ -8,7 +8,8 @@ const { uploadToCloudinary } = require('../middlewares/upload');
 exports.updateProfile = async (req, res) => {
     try {
         const userId = req.user.id || req.user._id; 
-        const { name, domisili, campus, bankName, bankAccount } = req.body;
+        // Tambahkan bankAccountName (Atas Nama) di destructuring req.body
+        const { name, domisili, campus, bankName, bankAccount, bankAccountName } = req.body;
 
         const user = await User.findById(userId);
         
@@ -16,33 +17,52 @@ exports.updateProfile = async (req, res) => {
             return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
         }
 
+        // 1. Update Informasi Dasar
         if (name !== undefined) user.name = name;
         if (domisili !== undefined) user.domisili = domisili;
         if (campus !== undefined) user.campus = campus;
-        if (bankName !== undefined) user.bankName = bankName;
-        if (bankAccount !== undefined) user.bankAccount = bankAccount;
 
-        if (req.files) {
-            if (req.files['avatar'] && req.files['avatar'][0]) {
-                const avatarUrl = await uploadToCloudinary(req.files['avatar'][0].buffer, 'avatars');
-                user.profilePicture = avatarUrl;
-            }
+        // 2. Handle Upload Avatar (Terpisah dari logika rekening)
+        if (req.files && req.files['avatar'] && req.files['avatar'][0]) {
+            const avatarUrl = await uploadToCloudinary(req.files['avatar'][0].buffer, 'avatars');
+            user.profilePicture = avatarUrl;
+        }
 
-            if (req.files['qris'] && req.files['qris'][0]) {
-                const qrisUrl = await uploadToCloudinary(req.files['qris'][0].buffer, 'qris_codes');
-                user.qrisUrl = qrisUrl;
-            }
+        // 3. --- LOGIKA EKSKLUSIF: BANK VS QRIS ---
+        
+        // CEK APAKAH ADA UPLOAD QRIS BARU
+        const isUploadingQris = req.files && req.files['qris'] && req.files['qris'][0];
+
+        if (isUploadingQris) {
+            // JIKA USER UPLOAD QRIS:
+            const qrisUrl = await uploadToCloudinary(req.files['qris'][0].buffer, 'qris_codes');
+            user.qrisUrl = qrisUrl;
+
+            // Paksa hapus semua data bank (Karena memilih QRIS)
+            user.bankName = null;
+            user.bankAccount = null;
+            user.bankAccountName = null;
+        } 
+        else if (bankName || bankAccount || bankAccountName) {
+            // JIKA USER MENGISI DATA BANK (Dan tidak upload QRIS di request ini):
+            user.bankName = bankName || user.bankName;
+            user.bankAccount = bankAccount || user.bankAccount;
+            user.bankAccountName = bankAccountName || user.bankAccountName;
+
+            // Paksa hapus data QRIS (Karena memilih input Bank manual)
+            user.qrisUrl = null;
         }
 
         await user.save();
 
+        // Bersihkan data sensitif sebelum dikirim kembali
         const userData = user.toObject();
         delete userData.password;
 
         res.status(200).json({ 
             success: true, 
             data: userData, 
-            message: 'Profil dan data rekening berhasil diperbarui!' 
+            message: 'Profil dan metode pencairan dana berhasil diperbarui!' 
         });
 
     } catch (error) {

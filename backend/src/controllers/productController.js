@@ -44,17 +44,26 @@ exports.createProduct = async (req, res) => {
 exports.getProducts = async (req, res) => {
     try {
         const { category } = req.query;
-        let query = { status: { $ne: 'Dihapus' } }; 
+
+        // FILTER KETAT: Hanya tampilkan yang statusnya 'Tersedia' dan stok > 0
+        let query = { 
+            status: 'Tersedia', 
+            stock: { $gt: 0 } 
+        };
         
         if (category && category !== 'Semua') {
             query.category = category;
         }
 
         const products = await Product.find(query)
-            .populate('sellerId', 'name campus profilePicture isVerified isBanned') // 👈 TAMBAHKAN isBanned
+            .populate('sellerId', 'name campus profilePicture isVerified isBanned')
             .sort({ createdAt: -1 });
             
-        res.status(200).json({ success: true, count: products.length, data: products });
+        res.status(200).json({ 
+            success: true, 
+            count: products.length, 
+            data: products 
+        });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
