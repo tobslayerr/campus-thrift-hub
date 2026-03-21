@@ -1,3 +1,4 @@
+ 
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
@@ -6,7 +7,7 @@ import {
     ClipboardList, Clock, ShieldCheck, 
     Landmark, CheckCircle, MessageSquare, 
     AlertTriangle, Lock, KeyRound, ArrowRight, User,
-    Star, ImagePlus, X
+    Star, ImagePlus, X, Flag
 } from 'lucide-react';
 
 export default function MyTransactions() {
@@ -24,6 +25,20 @@ export default function MyTransactions() {
     const [commentForm, setCommentForm] = useState('');
     const [reviewImages, setReviewImages] = useState([]);
     const [submittingReview, setSubmittingReview] = useState(false);
+
+    // ==========================================
+    // STATE BARU: SISTEM LAPORAN
+    // ==========================================
+    const [showReportModal, setShowReportModal] = useState(false);
+    const [reportForm, setReportForm] = useState({ 
+        reportedUserId: '', 
+        transactionId: '', 
+        title: '', 
+        description: '', 
+        evidenceImage: null 
+    });
+    const [reportPreview, setReportPreview] = useState(null);
+    const [submittingReport, setSubmittingReport] = useState(false);
 
     const fetchTransactions = async () => {
         try {
@@ -60,7 +75,9 @@ export default function MyTransactions() {
         }
     };
 
-    // HANDLER GAMBAR ULASAN
+    // ==========================================
+    // HANDLER GAMBAR ULASAN & LAPORAN
+    // ==========================================
     const handleAddReviewImages = (e) => {
         const files = Array.from(e.target.files);
         if (reviewImages.length + files.length > 5) return toast.error("Maksimal 5 gambar!");
@@ -72,7 +89,17 @@ export default function MyTransactions() {
         setReviewImages(reviewImages.filter((_, i) => i !== index));
     };
 
+    const handleReportImageChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setReportForm({ ...reportForm, evidenceImage: file });
+            setReportPreview(URL.createObjectURL(file));
+        }
+    };
+
+    // ==========================================
     // SUBMIT ULASAN
+    // ==========================================
     const handleSubmitReview = async (e, trx) => {
         e.preventDefault();
         setSubmittingReview(true);
@@ -84,7 +111,7 @@ export default function MyTransactions() {
 
         formData.append('productId', productData._id);
         formData.append('sellerId', sellerData._id);
-        formData.append('transactionId', trx._id); // MENGIKAT ULASAN KE TRANSAKSI
+        formData.append('transactionId', trx._id); 
         formData.append('rating', ratingForm);
         formData.append('comment', commentForm);
         
@@ -98,7 +125,6 @@ export default function MyTransactions() {
             });
             toast.success('Ulasan berhasil dikirim! Terima kasih.', { id: toastId });
             
-            // Langsung update state pembelian agar ulasan muncul tanpa refresh halaman
             setPurchases(prevPurchases => 
                 prevPurchases.map(p => 
                     p._id === trx._id ? { ...p, review: res.data.data } : p
@@ -113,6 +139,42 @@ export default function MyTransactions() {
         }
     };
 
+    // ==========================================
+    // SUBMIT LAPORAN (REPORT)
+    // ==========================================
+    const handleSubmitReport = async (e) => {
+        e.preventDefault();
+        if (!reportForm.title || !reportForm.description) return toast.error("Harap isi semua kolom!");
+        if (!reportForm.evidenceImage) return toast.error("Harap lampirkan bukti foto (Screenshot)!");
+
+        setSubmittingReport(true);
+        const toastId = toast.loading("Mengirim laporan ke Admin...");
+
+        const formData = new FormData();
+        formData.append('reportedUserId', reportForm.reportedUserId);
+        formData.append('transactionId', reportForm.transactionId);
+        formData.append('title', reportForm.title);
+        formData.append('description', reportForm.description);
+        formData.append('evidenceImage', reportForm.evidenceImage);
+
+        try {
+            await api.post('/reports', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            toast.success("Laporan berhasil dikirim. Admin akan segera menindaklanjuti.", { id: toastId });
+            setShowReportModal(false);
+            setReportForm({ reportedUserId: '', transactionId: '', title: '', description: '', evidenceImage: null });
+            setReportPreview(null);
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Gagal mengirim laporan", { id: toastId });
+        } finally {
+            setSubmittingReport(false);
+        }
+    };
+
+    // ==========================================
+    // BADGE STATUS
+    // ==========================================
     const getStatusBadge = (status) => {
         switch (status) {
             case 'Menunggu Verifikasi': return <span className="flex items-center gap-1.5 bg-orange-50 text-[#FF9500] px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-orange-200"><Clock size={14} /> Cek Admin</span>;
@@ -130,6 +192,8 @@ export default function MyTransactions() {
 
     return (
         <div className="max-w-5xl mx-auto p-4 md:p-8 pb-32 min-h-screen bg-[#F8FAFC]">
+            
+            {/* HEADER */}
             <div className="mb-10">
                 <h1 className="text-3xl font-black text-slate-900 mb-2 flex items-center gap-3 tracking-tight">
                     <ClipboardList className="text-[#00478F]" size={36} strokeWidth={2.5} /> 
@@ -138,6 +202,7 @@ export default function MyTransactions() {
                 <p className="text-slate-500 font-medium">Pantau keamanan dana dan jadwal COD barang Anda di sini.</p>
             </div>
 
+            {/* TAB NAVIGASI */}
             <div className="flex gap-8 border-b border-slate-200 mb-8 overflow-x-auto no-scrollbar">
                 <button onClick={() => setActiveTab('pembelian')} className={`pb-4 font-black text-lg transition-all whitespace-nowrap relative ${activeTab === 'pembelian' ? 'text-[#00478F]' : 'text-slate-400 hover:text-slate-600'}`}>
                     Pembelian Saya ({purchases.length})
@@ -149,6 +214,7 @@ export default function MyTransactions() {
                 </button>
             </div>
 
+            {/* KONTEN */}
             {activeData.length === 0 ? (
                 <div className="bg-white rounded-[3rem] p-16 text-center shadow-sm border border-slate-100">
                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -179,6 +245,7 @@ export default function MyTransactions() {
 
                                 <div className="p-6">
                                     <div className="flex flex-col lg:flex-row gap-6 lg:items-center">
+                                        {/* Info Produk */}
                                         <div className="flex items-center gap-5 flex-1">
                                             <div className="w-24 h-24 rounded-2xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
                                                 <img src={(productData.images && productData.images.length > 0) ? productData.images[0] : (productData.imageUrl || 'https://via.placeholder.com/150')} alt="produk" className="w-full h-full object-cover" />
@@ -189,19 +256,38 @@ export default function MyTransactions() {
                                             </div>
                                         </div>
 
+                                        {/* Info Lawan Bicara (Pembeli/Penjual) */}
                                         <div className="flex-1 lg:border-l border-slate-100 lg:pl-8 flex justify-between items-center pt-4 lg:pt-0 border-t lg:border-t-0 mt-4 lg:mt-0">
                                             <div>
                                                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-3">{activeTab === 'pembelian' ? 'Informasi Penjual' : 'Informasi Pembeli'}</p>
+                                                
                                                 <div className="flex items-center gap-3">
                                                     <img src={opponentData.profilePicture || 'https://via.placeholder.com/150'} alt="avatar" className="w-10 h-10 rounded-full ring-2 ring-slate-100 object-cover" />
                                                     <div>
                                                         <p className="font-bold text-slate-800">{opponentData.name || 'User Tidak Diketahui'}</p>
-                                                        <p className="text-xs text-slate-500 font-medium truncate max-w-[150px] flex items-center gap-1"><User size={12} /> {opponentData.campus || opponentData.domisili || 'Lokasi rahasia'}</p>
+                                                        <p className="text-[10px] text-slate-500 font-medium truncate max-w-[150px] flex items-center gap-1"><User size={12} /> {opponentData.campus || opponentData.domisili || 'Lokasi rahasia'}</p>
                                                     </div>
                                                 </div>
+                                                
+                                                {/* TOMBOL LAPORKAN PENGGUNA (BARU) */}
+                                                {opponentData._id && (
+                                                    <button 
+                                                        onClick={() => {
+                                                            setReportForm({ ...reportForm, reportedUserId: opponentData._id, transactionId: trx._id });
+                                                            setShowReportModal(true);
+                                                        }}
+                                                        className="mt-3 text-[10px] font-black text-red-500 hover:text-red-700 transition-all flex items-center gap-1"
+                                                    >
+                                                        <AlertTriangle size={12} /> Laporkan Pengguna
+                                                    </button>
+                                                )}
                                             </div>
+
+                                            {/* Tombol Chat */}
                                             {opponentData._id && (
-                                                <Link to={`/chat/${opponentData._id}`} className="w-12 h-12 rounded-2xl bg-[#FF9500]/10 text-[#FF9500] flex items-center justify-center hover:bg-[#FF9500] hover:text-white transition-all shadow-sm shrink-0"><MessageSquare size={20} /></Link>
+                                                <Link to={`/chat/${opponentData._id}`} className="w-12 h-12 rounded-2xl bg-[#FF9500]/10 text-[#FF9500] flex items-center justify-center hover:bg-[#FF9500] hover:text-white transition-all shadow-sm shrink-0">
+                                                    <MessageSquare size={20} />
+                                                </Link>
                                             )}
                                         </div>
                                     </div>
@@ -225,7 +311,6 @@ export default function MyTransactions() {
                                     {activeTab === 'pembelian' && (trx.status === 'Selesai' || trx.status === 'Dana Dicairkan') && (
                                         <div className="mt-6 border-t border-slate-100 pt-6">
                                             {trx.review ? (
-                                                // TAMPILKAN HISTORY ULASAN JIKA SUDAH PERNAH DIKIRIM UNTUK TRANSAKSI INI
                                                 <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 relative overflow-hidden">
                                                     <div className="absolute top-0 right-0 bg-[#FF9500] text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest">
                                                         Ulasan Anda
@@ -250,7 +335,6 @@ export default function MyTransactions() {
                                                     )}
                                                 </div>
                                             ) : reviewingTrxId === trx._id ? (
-                                                // FORM BERI ULASAN
                                                 <div className="bg-slate-50 p-6 md:p-8 rounded-2xl border border-slate-200">
                                                     <div className="flex justify-between items-center mb-6 border-b border-slate-200 pb-4">
                                                         <h4 className="font-black text-slate-800 text-lg">Nilai Pembelian Ini</h4>
@@ -356,13 +440,67 @@ export default function MyTransactions() {
                                             </div>
                                         </div>
                                     )}
-
                                 </div>
                             </div>
                         );
                     })}
                 </div>
             )}
+
+            {/* ========================================================= */}
+            {/* MODAL: LAPORKAN PENGGUNA */}
+            {/* ========================================================= */}
+            {showReportModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-red-600 flex items-center gap-2"><Flag size={24}/> Laporkan Pengguna</h2>
+                            <button onClick={() => setShowReportModal(false)} className="text-slate-400 hover:bg-slate-100 p-2 rounded-full"><X size={20}/></button>
+                        </div>
+                        
+                        <p className="text-sm text-slate-500 font-medium mb-6">Bantu kami menjaga komunitas tetap aman. Laporkan jika ada tindakan penipuan, barang palsu, atau pelecehan.</p>
+
+                        <form onSubmit={handleSubmitReport} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Jenis Pelanggaran</label>
+                                <select required value={reportForm.title} onChange={(e) => setReportForm({...reportForm, title: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-red-500 outline-none">
+                                    <option value="" disabled>Pilih Jenis Pelanggaran...</option>
+                                    <option value="Penipuan / Fraud">Penipuan / Ajakan Transaksi Luar</option>
+                                    <option value="Barang Tidak Sesuai Deskripsi">Barang Rusak / Tidak Sesuai</option>
+                                    <option value="Pelecehan / Kata Kasar">Pelecehan / Kata-kata Kasar</option>
+                                    <option value="Lainnya">Lainnya</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Deskripsi Kejadian</label>
+                                <textarea required value={reportForm.description} onChange={(e) => setReportForm({...reportForm, description: e.target.value})} placeholder="Ceritakan detail kejadian secara kronologis..." className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-red-500 outline-none min-h-[100px]"></textarea>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Upload Bukti (Wajib)</label>
+                                {reportPreview ? (
+                                    <div className="relative rounded-xl overflow-hidden border border-slate-200 mb-2">
+                                        <img src={reportPreview} className="w-full h-32 object-cover" alt="preview" />
+                                        <button type="button" onClick={() => {setReportForm({...reportForm, evidenceImage: null}); setReportPreview(null);}} className="absolute top-2 right-2 bg-black/50 text-white p-1.5 rounded-lg hover:bg-red-500"><X size={16}/></button>
+                                    </div>
+                                ) : (
+                                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-red-50 hover:border-red-300 hover:text-red-500 cursor-pointer transition-colors text-slate-400">
+                                        <ImagePlus size={28} className="mb-2" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest">Pilih Gambar (Screenshot)</span>
+                                        <input type="file" required accept="image/*" onChange={handleReportImageChange} className="hidden" />
+                                    </label>
+                                )}
+                            </div>
+
+                            <button type="submit" disabled={submittingReport} className="w-full py-4 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 uppercase tracking-widest text-xs shadow-lg shadow-red-500/30 transition-all mt-4 disabled:opacity-50">
+                                {submittingReport ? 'Mengirim Laporan...' : 'Kirim Laporan'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 }

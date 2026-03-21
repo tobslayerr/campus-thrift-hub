@@ -11,6 +11,7 @@ const userRoutes = require('./src/routes/userRoutes');
 const messageRoutes = require('./src/routes/messageRoutes');
 const reviewRoutes = require('./src/routes/reviewRoutes');
 const paymentMethodRoutes = require('./src/routes/paymentMethodRoutes');
+const reportRoutes = require('./src/routes/reportRoutes'); // 👈 TAMBAHAN BARU
 
 // Inisialisasi Express
 const app = express();
@@ -31,6 +32,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/payment-methods', paymentMethodRoutes);
+app.use('/api/reports', reportRoutes); // 👈 TAMBAHAN BARU
 app.use('/api/categories', require('./src/routes/categoryRoutes'));
 
 // Route Default / Home

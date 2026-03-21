@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 // PERHATIKAN: Ubah userController menjadi UserController (U besar)
-const { updateProfile, getSellerProfile } = require('../controllers/UserController');
+const { updateProfile, getSellerProfile, getAllUsersForAdmin, banUser } = require('../controllers/UserController');
 
 const { protect } = require('../middlewares/authMiddleware');
 const { upload } = require('../middlewares/upload');
@@ -19,5 +19,9 @@ router.put(
     ]), 
     updateProfile
 );
+
+router.get('/admin/all', protect, getAllUsersForAdmin);
+
+router.put('/admin/ban/:id', protect, banUser);
 
 module.exports = router;

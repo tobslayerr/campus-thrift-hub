@@ -2,7 +2,12 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import useAuthStore from '../../store/authStore';
-import { MapPin, School, Star, ShieldCheck, ArrowRight, Edit, PackageSearch, PlusCircle, MessageSquare } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { 
+    MapPin, School, Star, ShieldCheck, 
+    ArrowRight, Edit, PackageSearch, PlusCircle, 
+    MessageSquare, AlertTriangle, X, ImagePlus 
+} from 'lucide-react';
 
 export default function SellerProfile() {
     const { id } = useParams();
@@ -11,10 +16,18 @@ export default function SellerProfile() {
 
     const [seller, setSeller] = useState(null);
     const [products, setProducts] = useState([]);
-    const [reviews, setReviews] = useState([]); // State untuk menampung ulasan
+    const [reviews, setReviews] = useState([]); 
     const [loading, setLoading] = useState(true);
     
     const [activeCategory, setActiveCategory] = useState('Semua');
+
+    // ==========================================
+    // STATE SISTEM LAPORAN PENGGUNA
+    // ==========================================
+    const [showReportModal, setShowReportModal] = useState(false);
+    const [reportForm, setReportForm] = useState({ title: '', description: '', evidenceImage: null });
+    const [reportPreview, setReportPreview] = useState(null);
+    const [submittingReport, setSubmittingReport] = useState(false);
 
     const isMyProfile = user?.id === id || user?._id === id;
 
@@ -24,7 +37,7 @@ export default function SellerProfile() {
                 const response = await api.get(`/users/seller/${id}`);
                 setSeller(response.data.data.profile);
                 setProducts(response.data.data.products);
-                setReviews(response.data.data.reviews || []); // Ambil ulasan dari backend
+                setReviews(response.data.data.reviews || []);
             } catch (error) {
                 console.error("Gagal memuat profil seller", error);
             } finally {
@@ -33,6 +46,46 @@ export default function SellerProfile() {
         };
         fetchProfile();
     }, [id]);
+
+    // ==========================================
+    // HANDLER SUBMIT LAPORAN
+    // ==========================================
+    const handleReportImageChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setReportForm({ ...reportForm, evidenceImage: file });
+            setReportPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleSubmitReport = async (e) => {
+        e.preventDefault();
+        if (!reportForm.title || !reportForm.description) return toast.error("Harap isi semua kolom!");
+        if (!reportForm.evidenceImage) return toast.error("Harap lampirkan bukti foto (Screenshot)!");
+
+        setSubmittingReport(true);
+        const toastId = toast.loading("Mengirim laporan ke Admin...");
+
+        const formData = new FormData();
+        formData.append('reportedUserId', id); // Melaporkan pemilik profil ini
+        formData.append('title', reportForm.title);
+        formData.append('description', reportForm.description);
+        formData.append('evidenceImage', reportForm.evidenceImage);
+
+        try {
+            await api.post('/reports', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            toast.success("Laporan berhasil dikirim. Admin akan segera menindaklanjuti.", { id: toastId });
+            setShowReportModal(false);
+            setReportForm({ title: '', description: '', evidenceImage: null });
+            setReportPreview(null);
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Gagal mengirim laporan", { id: toastId });
+        } finally {
+            setSubmittingReport(false);
+        }
+    };
 
     if (loading) return (
         <div className="flex justify-center items-center min-h-[60vh]">
@@ -131,10 +184,21 @@ export default function SellerProfile() {
                             <Star size={16} fill="#FF9500"/> {seller.rating?.toFixed(1) || '0.0'} / 5.0
                         </span>
                     </div>
-                    {isMyProfile && (
+
+                    {/* ACTION BUTTONS (Milik Saya vs Toko Orang Lain) */}
+                    {isMyProfile ? (
                         <button onClick={() => navigate('/my-profile')} className="mt-8 px-8 py-3 bg-white/10 backdrop-blur-md text-white font-black rounded-full border border-white/20 hover:bg-white hover:text-[#00478F] text-xs uppercase shadow-lg transition-all hover:scale-105 active:scale-95">
                             Pengaturan Akun & Rekening
                         </button>
+                    ) : (
+                        <div className="mt-8 flex flex-wrap justify-center gap-3">
+                            <button onClick={() => navigate(`/chat/${id}`)} className="px-8 py-3 bg-white text-[#00478F] font-black rounded-full shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center gap-2 text-xs uppercase tracking-widest">
+                                <MessageSquare size={16} /> Chat Penjual
+                            </button>
+                            <button onClick={() => setShowReportModal(true)} className="px-6 py-3 bg-red-500/20 backdrop-blur-md border border-red-500/50 text-red-100 font-black rounded-full hover:bg-red-500 hover:text-white transition-all hover:scale-105 active:scale-95 flex items-center gap-2 text-xs uppercase tracking-widest">
+                                <AlertTriangle size={16} /> Laporkan Toko
+                            </button>
+                        </div>
                     )}
                 </div>
             </div>
@@ -209,8 +273,6 @@ export default function SellerProfile() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {reviews.map((rev) => (
                                 <div key={rev._id} className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 flex flex-col">
-                                    
-                                    {/* Info Pembeli & Waktu */}
                                     <div className="flex items-center gap-3 mb-4">
                                         <img src={rev.buyerId?.profilePicture || 'https://via.placeholder.com/150'} className="w-10 h-10 rounded-full object-cover" alt=""/>
                                         <div className="flex-1">
@@ -222,32 +284,19 @@ export default function SellerProfile() {
                                         <span className="text-[10px] text-slate-400 font-bold">{new Date(rev.createdAt).toLocaleDateString('id-ID')}</span>
                                     </div>
                                     
-                                    {/* Info Produk Yang Di-Review */}
                                     <Link to={`/product/${rev.productId?._id}`} className="bg-white p-2 rounded-xl border border-slate-100 flex items-center gap-3 mb-3 hover:border-[#00478F] transition-colors group">
-                                        <img 
-                                            src={(rev.productId?.images && rev.productId.images.length > 0) ? rev.productId.images[0] : rev.productId?.imageUrl} 
-                                            className="w-10 h-10 rounded-lg object-cover bg-slate-100" 
-                                            alt=""
-                                        />
+                                        <img src={(rev.productId?.images && rev.productId.images.length > 0) ? rev.productId.images[0] : rev.productId?.imageUrl} className="w-10 h-10 rounded-lg object-cover bg-slate-100" alt=""/>
                                         <p className="text-xs font-bold text-slate-600 line-clamp-1 group-hover:text-[#00478F]">
                                             {rev.productId?.title || 'Produk Dihapus'}
                                         </p>
                                     </Link>
 
-                                    {/* Komentar */}
                                     <p className="text-slate-600 text-sm font-medium leading-relaxed italic">"{rev.comment}"</p>
 
-                                    {/* Gambar Ulasan */}
                                     {rev.images && rev.images.length > 0 && (
                                         <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
                                             {rev.images.map((img, idx) => (
-                                                <img 
-                                                    key={idx} 
-                                                    src={img} 
-                                                    alt="Foto Ulasan" 
-                                                    className="w-16 h-16 rounded-xl object-cover shrink-0 border border-slate-200 hover:scale-105 cursor-pointer transition-transform" 
-                                                    onClick={() => window.open(img, '_blank')} 
-                                                />
+                                                <img key={idx} src={img} alt="Foto Ulasan" className="w-16 h-16 rounded-xl object-cover shrink-0 border border-slate-200 hover:scale-105 cursor-pointer transition-transform" onClick={() => window.open(img, '_blank')} />
                                             ))}
                                         </div>
                                     )}
@@ -258,6 +307,60 @@ export default function SellerProfile() {
                 </div>
 
             </main>
+
+            {/* ========================================================= */}
+            {/* MODAL: LAPORKAN PENGGUNA */}
+            {/* ========================================================= */}
+            {showReportModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-red-600 flex items-center gap-2"><AlertTriangle size={24}/> Laporkan Toko</h2>
+                            <button onClick={() => setShowReportModal(false)} className="text-slate-400 hover:bg-slate-100 p-2 rounded-full"><X size={20}/></button>
+                        </div>
+                        
+                        <p className="text-sm text-slate-500 font-medium mb-6">Bantu kami menjaga komunitas tetap aman. Laporkan toko ini jika terindikasi melakukan penipuan atau menjual barang terlarang.</p>
+
+                        <form onSubmit={handleSubmitReport} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Jenis Pelanggaran</label>
+                                <select required value={reportForm.title} onChange={(e) => setReportForm({...reportForm, title: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-red-500 outline-none">
+                                    <option value="" disabled>Pilih Jenis Pelanggaran...</option>
+                                    <option value="Toko Penipu / Scam">Terindikasi Penipuan / Scam</option>
+                                    <option value="Barang Palsu / Terlarang">Menjual Barang Terlarang/Palsu</option>
+                                    <option value="Spam / Iklan Mengganggu">Spam atau Iklan Mengganggu</option>
+                                    <option value="Lainnya">Lainnya</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Deskripsi Kejadian</label>
+                                <textarea required value={reportForm.description} onChange={(e) => setReportForm({...reportForm, description: e.target.value})} placeholder="Ceritakan detail kecurigaan Anda..." className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-red-500 outline-none min-h-[100px]"></textarea>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Upload Bukti (Opsional)</label>
+                                {reportPreview ? (
+                                    <div className="relative rounded-xl overflow-hidden border border-slate-200 mb-2">
+                                        <img src={reportPreview} className="w-full h-32 object-cover" alt="preview" />
+                                        <button type="button" onClick={() => {setReportForm({...reportForm, evidenceImage: null}); setReportPreview(null);}} className="absolute top-2 right-2 bg-black/50 text-white p-1.5 rounded-lg hover:bg-red-500"><X size={16}/></button>
+                                    </div>
+                                ) : (
+                                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-red-50 hover:border-red-300 hover:text-red-500 cursor-pointer transition-colors text-slate-400">
+                                        <ImagePlus size={28} className="mb-2" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest">Pilih Gambar (Screenshot)</span>
+                                        <input type="file" accept="image/*" onChange={handleReportImageChange} className="hidden" />
+                                    </label>
+                                )}
+                            </div>
+
+                            <button type="submit" disabled={submittingReport} className="w-full py-4 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 uppercase tracking-widest text-xs shadow-lg shadow-red-500/30 transition-all mt-4 disabled:opacity-50">
+                                {submittingReport ? 'Mengirim Laporan...' : 'Kirim Laporan'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

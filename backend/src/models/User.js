@@ -60,6 +60,9 @@ const userSchema = new mongoose.Schema({
     qrisUrl: { 
         type: String, default: '' 
     }, 
+    isBanned: { type: Boolean, default: false },
+    banReason: { type: String, default: null },
+    banUntil: { type: Date, default: null },
     verificationToken: { 
         type: String 
     },

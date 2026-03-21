@@ -93,6 +93,31 @@ exports.loginUser = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ message: 'Password salah!' });
 
+        // =========================================================
+        // 🔥 PENGECEKAN STATUS BANNED SEBELUM MEMBERIKAN TOKEN 🔥
+        // =========================================================
+        if (user.isBanned) {
+            const now = new Date();
+            
+            // Cek apakah ban permanen (!user.banUntil) ATAU masa ban belum habis
+            if (!user.banUntil || new Date(user.banUntil) > now) {
+                return res.status(403).json({ 
+                    success: false, 
+                    isBanned: true, 
+                    banReason: user.banReason, 
+                    banUntil: user.banUntil,
+                    message: 'Akun Anda telah diblokir oleh Admin.' 
+                });
+            } else {
+                // Masa hukuman sudah lewat (Expired), lepaskan ban secara otomatis
+                user.isBanned = false;
+                user.banReason = null;
+                user.banUntil = null;
+                await user.save();
+            }
+        }
+        // =========================================================
+
         const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
         res.status(200).json({
@@ -145,7 +170,6 @@ exports.updateProfile = async (req, res) => {
         user.bankAccount = bankAccount || user.bankAccount;
 
         // Logika Upload File (Avatar & QRIS)
-        // Menggunakan req.files dari multer .fields()
         if (req.files) {
             // 1. Jika ada upload foto profil (avatar)
             if (req.files.avatar) {

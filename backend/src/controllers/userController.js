@@ -92,3 +92,44 @@ exports.getSellerProfile = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+exports.getAllUsersForAdmin = async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak.' });
+        const users = await User.find({ role: 'user' }).select('-password').sort({ createdAt: -1 });
+        res.status(200).json({ success: true, data: users });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.banUser = async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak.' });
+        
+        const { isBanned, banReason, banDurationDays } = req.body; // banDurationDays = 0 untuk permanen
+        const user = await User.findById(req.params.id);
+        
+        if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
+
+        user.isBanned = isBanned;
+        if (isBanned) {
+            user.banReason = banReason;
+            if (banDurationDays > 0) {
+                const banDate = new Date();
+                banDate.setDate(banDate.getDate() + Number(banDurationDays));
+                user.banUntil = banDate;
+            } else {
+                user.banUntil = null; // Permanen
+            }
+        } else {
+            user.banReason = null;
+            user.banUntil = null;
+        }
+
+        await user.save();
+        res.status(200).json({ success: true, message: `User ${isBanned ? 'diblokir' : 'diaktifkan kembali'}.` });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};

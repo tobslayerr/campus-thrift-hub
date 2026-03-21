@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import api from '../../api/axios'; // Tambahkan impor API
 import useAuthStore from '../../store/authStore';
 
 export default function Login() {
@@ -10,10 +11,33 @@ export default function Login() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        await login(email, password);
-        // Jika tidak ada error di store, arahkan ke beranda
-        if (!useAuthStore.getState().error) {
-            navigate('/');
+        
+        try {
+            // 1. CEK API LANGSUNG DI SINI UNTUK MENANGKAP DATA BANNED LENGKAP
+            // Kita hit ke backend sebelum store dijalankan.
+            await api.post('/auth/login', { email, password });
+            
+            // 2. Jika lolos (tidak ada error 403/Banned), baru panggil fungsi dari store
+            await login(email, password);
+            
+            if (!useAuthStore.getState().error) {
+                navigate('/');
+            }
+        } catch (err) {
+            // 3. TANGKAP RESPONSE BANNED DARI BACKEND
+            if (err.response?.status === 403 && err.response?.data?.isBanned) {
+                // Arahkan ke halaman banned dengan membawa alasan dan masa kadaluarsa
+                navigate('/banned', { 
+                    state: { 
+                        reason: err.response.data.banReason, 
+                        until: err.response.data.banUntil 
+                    } 
+                });
+            } else {
+                // Jika error biasa (seperti password salah / email tidak terdaftar),
+                // jalankan fungsi store bawaan agar pesan error-nya muncul di UI kamu.
+                await login(email, password);
+            }
         }
     };
 
@@ -22,6 +46,7 @@ export default function Login() {
             <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md border border-gray-100">
                 <h2 className="text-2xl font-extrabold text-gray-900 mb-6 text-center">Masuk ke Campus Thrift</h2>
                 
+                {/* Menampilkan pesan error dari Store (misal: "Password salah") */}
                 {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4 border border-red-200">{error}</div>}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
