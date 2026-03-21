@@ -23,8 +23,18 @@ exports.checkout = async (req, res) => {
         if (!req.file) return res.status(400).json({ message: 'Bukti transfer wajib diupload!' });
 
         const proofUrl = await uploadToCloudinary(req.file.buffer, 'proofs');
-        const adminFee = product.price * 0.05;
-        const sellerIncome = product.price - adminFee;
+        
+        // ==========================================
+        // 🧮 LOGIKA SISTEM FEE DINAMIS
+        // ==========================================
+        let adminFee = 0;
+        if (product.price <= 100000) {
+            adminFee = product.price * 0.05; // Potongan 5% jika harga <= 100rb
+        } else {
+            adminFee = product.price * 0.10; // Potongan 10% jika harga > 100rb
+        }
+        
+        const sellerIncome = product.price - adminFee; // Uang bersih untuk penjual
         const codPin = Math.floor(1000 + Math.random() * 9000).toString();
 
         const transaction = await Transaction.create({
@@ -32,8 +42,8 @@ exports.checkout = async (req, res) => {
             buyerId: buyerId,
             sellerId: product.sellerId,
             price: product.price,
-            adminFee,
-            sellerIncome,
+            adminFee: adminFee,
+            sellerIncome: sellerIncome,
             codPin,
             proofOfPayment: proofUrl,
             paymentMethod: paymentMethod || 'Transfer Bank (Default)' 
@@ -47,9 +57,7 @@ exports.checkout = async (req, res) => {
         }
         await product.save();
 
-        // ==========================================
         // 🔔 NOTIFIKASI CHECKOUT
-        // ==========================================
         await Notification.create({
             userId: buyerId,
             title: 'Pesanan Dibuat! 🛒',

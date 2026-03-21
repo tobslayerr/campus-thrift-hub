@@ -247,19 +247,39 @@ export default function MyTransactions() {
 
                                 <div className="p-6">
                                     <div className="flex flex-col lg:flex-row gap-6 lg:items-center">
-                                        {/* Info Produk */}
-                                        <div className="flex items-center gap-5 flex-1">
+                                        
+                                        {/* INFO PRODUK DAN RINCIAN FEE */}
+                                        <div className="flex items-start gap-5 flex-1">
                                             <div className="w-24 h-24 rounded-2xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200">
                                                 <img src={(productData.images && productData.images.length > 0) ? productData.images[0] : (productData.imageUrl || 'https://via.placeholder.com/150')} alt="produk" className="w-full h-full object-cover" />
                                             </div>
-                                            <div>
+                                            <div className="w-full">
                                                 <h3 className="font-black text-slate-900 text-lg line-clamp-2 leading-tight hover:text-[#00478F] transition-colors cursor-pointer">{productData.title || 'Produk Dihapus'}</h3>
-                                                <p className="font-black text-[#00478F] mt-2 text-xl">Rp{priceToDisplay.toLocaleString('id-ID')}</p>
+                                                
+                                                {/* LOGIKA TAMPILAN HARGA BERDASARKAN ROLE */}
+                                                {activeTab === 'penjualan' ? (
+                                                    <div className="mt-3 bg-slate-50 p-3 rounded-xl border border-slate-100 w-full max-w-sm">
+                                                        <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 mb-1">
+                                                            <span>Harga Jual:</span> 
+                                                            <span>Rp{priceToDisplay.toLocaleString('id-ID')}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-[10px] font-bold text-red-500 mb-2 pb-2 border-b border-slate-200">
+                                                            <span>Biaya Layanan:</span> 
+                                                            <span>-Rp{(trx.adminFee || 0).toLocaleString('id-ID')}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">Diterima:</span>
+                                                            <span className="font-black text-[#00478F] text-base">Rp{(trx.sellerIncome || priceToDisplay).toLocaleString('id-ID')}</span>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <p className="font-black text-[#00478F] mt-2 text-xl">Rp{priceToDisplay.toLocaleString('id-ID')}</p>
+                                                )}
                                             </div>
                                         </div>
 
                                         {/* Info Lawan Bicara (Pembeli/Penjual) */}
-                                        <div className="flex-1 lg:border-l border-slate-100 lg:pl-8 flex justify-between items-center pt-4 lg:pt-0 border-t lg:border-t-0 mt-4 lg:mt-0">
+                                        <div className="flex-1 lg:border-l border-slate-100 lg:pl-8 flex justify-between items-center pt-4 lg:pt-0 border-t lg:border-t-0 mt-4 lg:mt-0 h-full">
                                             <div>
                                                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-3">{activeTab === 'pembelian' ? 'Informasi Penjual' : 'Informasi Pembeli'}</p>
                                                 

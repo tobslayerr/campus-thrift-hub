@@ -108,7 +108,7 @@ export default function Dashboard() {
     const handleDisburseFunds = (id) => {
         openConfirm(
             "Cairkan Dana ke Penjual",
-            "Pastikan Anda telah mentransfer dana ke rekening penjual. Konfirmasi ini akan mengakhiri siklus transaksi secara permanen.",
+            "Pastikan Anda telah mentransfer dana ke rekening penjual sesuai nominal bersih (setelah dipotong fee). Konfirmasi ini akan mengakhiri siklus transaksi secara permanen.",
             async () => {
                 const toastId = toast.loading('Memproses pencairan...');
                 try { await api.put(`/transactions/${id}/disburse`); toast.success('Berhasil dicairkan!', { id: toastId }); fetchTransactions(); } 
@@ -328,11 +328,28 @@ export default function Dashboard() {
                                                     return (
                                                         <div key={trx._id} className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.02)] flex flex-col lg:flex-row lg:items-start justify-between gap-8 hover:border-[#00478F]/30 transition-all group">
                                                             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                                
+                                                                {/* INFORMASI BARANG & PERHITUNGAN FEE (Diperbarui) */}
                                                                 <div>
-                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Informasi Barang</span>
-                                                                    <h4 className="font-black text-slate-900 text-lg line-clamp-1 mb-1">{trx.productId?.title || 'Barang Dihapus'}</h4>
-                                                                    <span className="font-black text-[#00478F] text-xl">Rp{trx.price.toLocaleString('id-ID')}</span>
-                                                                    <div className="mt-4 space-y-2">
+                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Informasi Barang & Dana</span>
+                                                                    <h4 className="font-black text-slate-900 text-lg line-clamp-1 mb-3">{trx.productId?.title || 'Barang Dihapus'}</h4>
+                                                                    
+                                                                    <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 mb-4">
+                                                                        <div className="flex justify-between items-center text-xs font-bold text-slate-500 mb-1">
+                                                                            <span>Pembeli Bayar:</span>
+                                                                            <span>Rp{trx.price.toLocaleString('id-ID')}</span>
+                                                                        </div>
+                                                                        <div className="flex justify-between items-center text-xs font-bold text-red-500 mb-2 pb-2 border-b border-blue-200/50">
+                                                                            <span>Potongan Sistem:</span>
+                                                                            <span>- Rp{(trx.adminFee || 0).toLocaleString('id-ID')}</span>
+                                                                        </div>
+                                                                        <div className="flex justify-between items-center">
+                                                                            <span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">Transfer ke Penjual:</span>
+                                                                            <span className="font-black text-[#00478F] text-lg">Rp{(trx.sellerIncome || trx.price).toLocaleString('id-ID')}</span>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="mt-2 space-y-2">
                                                                         <p className="text-xs flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> <span className="font-bold text-slate-400">Pembeli:</span> <span className="font-black text-slate-700">{trx.buyerId?.name || 'User'}</span></p>
                                                                         <p className="text-xs flex items-center gap-2"><span className="w-1.5 h-1.5 bg-orange-500 rounded-full"></span> <span className="font-bold text-slate-400">Penjual:</span> <span className="font-black text-slate-700">{trx.sellerId?.name || 'User'}</span></p>
                                                                     </div>
