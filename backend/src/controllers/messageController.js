@@ -1,7 +1,8 @@
 const Message = require('../models/Message');
+const Notification = require('../models/Notification'); // 🔔 IMPORT NOTIFIKASI
+const User = require('../models/User'); // Untuk mengambil nama pengirim
 
 // In-memory cache ringan untuk melacak siapa yang sedang mengetik
-// (Tidak perlu disimpan di database karena status ini hanya sementara)
 const typingCache = new Map(); 
 
 // @desc    Kirim Pesan Baru
@@ -44,6 +45,29 @@ exports.sendMessage = async (req, res) => {
         // Hapus status typing saat pesan terkirim
         typingCache.delete(senderId.toString());
 
+        // ========================================================
+        // 🔔 LOGIKA NOTIFIKASI PESAN BARU
+        // ========================================================
+        // Cek apakah pengirim ini sudah mengirim pesan yang belum dibaca sebelumnya
+        // Jika sudah ada pesan belum dibaca dari pengirim ini, JANGAN kirim notif lagi (menghindari spam)
+        const unreadMsgCount = await Message.countDocuments({
+            senderId: senderId,
+            receiverId: receiverId,
+            isRead: false
+        });
+
+        if (unreadMsgCount === 1) { // Hanya kirim notif saat pesan pertama yang belum dibaca masuk
+            const sender = await User.findById(senderId).select('name');
+            const senderName = sender ? sender.name.split(' ')[0] : 'Seseorang';
+            
+            await Notification.create({
+                userId: receiverId,
+                title: `Pesan Baru dari ${senderName} 💬`,
+                message: text.length > 40 ? text.substring(0, 40) + '...' : text,
+                type: 'SYSTEM'
+            });
+        }
+
         res.status(201).json({ success: true, data: newMessage });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -56,10 +80,8 @@ exports.getMessages = async (req, res) => {
         const { receiverId } = req.params; 
         const myId = req.user.id;
 
-        // ========================================================
         // 1. UPDATE ISREAD: Tandai semua pesan yang dikirim oleh 
         //    lawan bicara kepadaku menjadi "SUDAH DIBACA"
-        // ========================================================
         await Message.updateMany(
             { senderId: receiverId, receiverId: myId, isRead: false },
             { $set: { isRead: true } }
@@ -112,7 +134,7 @@ exports.getConversations = async (req, res) => {
         const myId = req.user.id;
         const messages = await Message.find({
             $or: [{ senderId: myId }, { receiverId: myId }]
-        }).populate('senderId receiverId', 'name profilePicture isVerified');
+        }).populate('senderId receiverId', 'name profilePicture isVerified isBanned'); // 👈 TAMBAHKAN isBanned DI SINI
 
         const conversations = new Map();
 
@@ -142,7 +164,7 @@ exports.getConversations = async (req, res) => {
             }
         });
 
-        const chatList = Array.from(conversations.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+       const chatList = Array.from(conversations.values()).sort((a, b) => b.updatedAt - a.updatedAt);
         res.status(200).json({ success: true, data: chatList });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

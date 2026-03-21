@@ -1,18 +1,23 @@
 import { useState, useEffect } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import api from '../api/axios';
-import { Menu, X, MessageSquare, ClipboardList, PlusCircle, LogOut, User as UserIcon, Bell } from 'lucide-react';
+import { 
+  Menu, X, MessageSquare, ClipboardList, 
+  PlusCircle, LogOut, User as UserIcon, Bell, Loader2 
+} from 'lucide-react';
 
 export default function Navbar() {
   const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0); // STATE UNTUK NOTIFIKASI
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isLoggingOut, setIsLoggingOut] = useState(false); // STATE LOADING LOGOUT
   
   const userId = user?.id || user?._id;
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
-  // LOGIKA POLLING MENGAMBIL JUMLAH NOTIFIKASI BELUM DIBACA
+  // LOGIKA POLLING NOTIFIKASI
   useEffect(() => {
       if (user) {
           const fetchUnreadNotifs = async () => {
@@ -23,10 +28,23 @@ export default function Navbar() {
               } catch (e) { console.error(e); }
           };
           fetchUnreadNotifs();
-          const interval = setInterval(fetchUnreadNotifs, 10000); // Cek setiap 10 detik
+          const interval = setInterval(fetchUnreadNotifs, 10000);
           return () => clearInterval(interval);
       }
   }, [user]);
+
+  // HANDLER LOGOUT DENGAN LOADING EFFECT
+  const handleLogout = async () => {
+    setIsLoggingOut(true); // Mulai loading
+    setIsSidebarOpen(false); // Tutup sidebar jika sedang di mobile
+    
+    // Memberikan delay sedikit (800ms) agar user bisa melihat effect loading
+    setTimeout(async () => {
+      await logout();
+      setIsLoggingOut(false); // Matikan loading
+      navigate('/login');
+    }, 800);
+  };
 
   const navItemStyle = ({ isActive }) => `
     relative flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all duration-300 group
@@ -37,12 +55,20 @@ export default function Navbar() {
 
   return (
     <>
+      {/* --- OVERLAY LOADING LOGOUT --- */}
+      {isLoggingOut && (
+        <div className="fixed inset-0 bg-white/60 backdrop-blur-md z-[9999] flex flex-col items-center justify-center animate-in fade-in duration-300">
+          <Loader2 className="w-12 h-12 text-[#00478F] animate-spin mb-4" />
+          <p className="font-black text-[#00478F] tracking-widest text-sm uppercase">Keluar dari Akun...</p>
+        </div>
+      )}
+
       <nav className="bg-white/80 backdrop-blur-md py-4 px-6 sticky top-0 z-[60] shadow-sm border-b border-slate-200">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           
           <Link to="/" className="relative group">
             <div className="absolute -inset-4 bg-[#FF9500]/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <img src="/iconweb.png" alt="Logo" className="h-16 md:h-20 w-auto object-contain relative transition-transform duration-500 ease-out group-hover:scale-110 group-hover:-rotate-2" />
+            <img src="/iconweb.png" alt="Logo" className="h-16 md:h-24 w-auto object-contain relative transition-transform duration-500 ease-out group-hover:scale-110 group-hover:-rotate-2" />
           </Link>
 
           <div className="hidden md:flex gap-2 items-center">
@@ -56,7 +82,6 @@ export default function Navbar() {
                   <MessageSquare size={18} /><span>Pesan</span>
                 </NavLink>
 
-                {/* TOMBOL LONCENG NOTIFIKASI DESKTOP */}
                 <NavLink to="/notifications" className={navItemStyle}>
                   <div className="relative">
                       <Bell size={20} />
@@ -81,7 +106,11 @@ export default function Navbar() {
                     <span className="text-sm font-black text-slate-800">{user.name.split(' ')[0]}</span>
                   </Link>
 
-                  <button onClick={logout} className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
+                  <button 
+                    onClick={handleLogout} 
+                    className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all"
+                    title="Keluar Akun"
+                  >
                     <LogOut size={20} />
                   </button>
                 </div>
@@ -95,12 +124,11 @@ export default function Navbar() {
           </div>
 
           <div className="md:hidden flex items-center gap-3">
-              {/* TOMBOL LONCENG NOTIFIKASI MOBILE */}
               {user && (
                   <Link to="/notifications" className="relative p-2 text-[#00478F] bg-slate-100 rounded-2xl active:scale-90 transition-transform">
                       <Bell size={24} />
                       {unreadCount > 0 && (
-                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-sm border-2 border-white">
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center animate-bounce shadow-sm border-2 border-white">
                               {unreadCount > 9 ? '9+' : unreadCount}
                           </span>
                       )}
@@ -113,7 +141,7 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* MOBILE SIDEBAR OVERLAY & CONTENT */}
+      {/* MOBILE SIDEBAR */}
       <div className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] transition-all duration-500 md:hidden ${isSidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`} onClick={toggleSidebar}></div>
 
       <aside className={`fixed top-0 right-0 h-full w-[320px] bg-white z-[80] shadow-2xl transform transition-all duration-500 ease-in-out md:hidden flex flex-col ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
@@ -135,7 +163,7 @@ export default function Navbar() {
               <NavLink to="/notifications" onClick={toggleSidebar} className={navItemStyle}>
                   <Bell size={22} /> 
                   <span>Notifikasi</span>
-                  {unreadCount > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{unreadCount} Baru</span>}
+                  {unreadCount > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{unreadCount}</span>}
               </NavLink>
 
               <NavLink to="/upload" onClick={toggleSidebar} className="flex items-center justify-center gap-3 px-6 py-4 mt-2 bg-[#FF9500] text-white font-black rounded-2xl shadow-lg shadow-orange-200">
@@ -146,7 +174,10 @@ export default function Navbar() {
                 <NavLink to={`/seller/${userId}`} onClick={toggleSidebar} className="flex items-center justify-center gap-3 text-slate-500 font-bold hover:text-[#00478F] py-3 bg-slate-50 rounded-2xl border border-slate-100">
                   <UserIcon size={20} /> Pengaturan Profil
                 </NavLink>
-                <button onClick={() => { logout(); toggleSidebar(); }} className="flex items-center justify-center gap-3 text-red-500 font-black py-4 bg-red-50 hover:bg-red-500 hover:text-white rounded-2xl w-full transition-colors border border-red-100">
+                <button 
+                  onClick={handleLogout} 
+                  className="flex items-center justify-center gap-3 text-red-500 font-black py-4 bg-red-50 hover:bg-red-500 hover:text-white rounded-2xl w-full transition-colors border border-red-100"
+                >
                   <LogOut size={20} /> Keluar Akun
                 </button>
               </div>

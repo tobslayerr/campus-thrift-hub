@@ -1,259 +1,144 @@
-const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
-const Review = require('../models/Review');
-const Notification = require('../models/Notification'); // 🔔 IMPORT NOTIFIKASI
+const Notification = require('../models/Notification'); // Tersambung dengan fitur Notifikasi sebelumnya
 const { uploadToCloudinary } = require('../middlewares/upload');
 
-exports.checkout = async (req, res) => {
+exports.createProduct = async (req, res) => {
     try {
-        const { productId, paymentMethod } = req.body;
-        const buyerId = req.user.id;
+        const { title, description, price, category, stock } = req.body;
+        const sellerId = req.user.id;
 
-        const product = await Product.findById(productId);
-        if (!product) return res.status(404).json({ message: 'Barang tidak ditemukan' });
-
-        if (product.sellerId.toString() === buyerId) {
-            return res.status(400).json({ message: 'Ditolak: Anda tidak bisa membeli barang jualan Anda sendiri!' });
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ success: false, message: 'Minimal 1 foto produk wajib diupload!' });
         }
 
-        if (product.stock < 1 || product.status === 'Terjual' || product.status === 'Dihapus') {
-            return res.status(400).json({ message: 'Maaf, stok barang sudah habis atau sudah terjual!' });
-        }
+        const imageUrls = await Promise.all(
+            req.files.map(file => uploadToCloudinary(file.buffer, 'products'))
+        );
 
-        if (!req.file) return res.status(400).json({ message: 'Bukti transfer wajib diupload!' });
-
-        const proofUrl = await uploadToCloudinary(req.file.buffer, 'proofs');
-        const adminFee = product.price * 0.05;
-        const sellerIncome = product.price - adminFee;
-        const codPin = Math.floor(1000 + Math.random() * 9000).toString();
-
-        const transaction = await Transaction.create({
-            productId: productId,
-            buyerId: buyerId,
-            sellerId: product.sellerId,
-            price: product.price,
-            adminFee,
-            sellerIncome,
-            codPin,
-            proofOfPayment: proofUrl,
-            paymentMethod: paymentMethod || 'Transfer Bank (Default)' 
+        const product = await Product.create({
+            sellerId,
+            title,
+            description,
+            price,
+            category,
+            stock: stock || 1, 
+            images: imageUrls,
+            status: 'Tersedia'
         });
 
-        product.stock -= 1;
-        if (product.stock === 0) {
-            product.status = 'Menunggu Pembayaran';
-        } else {
-            product.status = 'Tersedia'; 
+        // 🔔 Notifikasi ke Penjual
+        await Notification.create({
+            userId: sellerId,
+            title: 'Produk Tayang! 🚀',
+            message: `Barang "${title}" berhasil diunggah dan tayang di marketplace.`,
+            type: 'SYSTEM'
+        });
+
+        res.status(201).json({ success: true, data: product, message: 'Produk berhasil diupload!' });
+    } catch (error) {
+        console.error("ERROR UPLOAD:", error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.getProducts = async (req, res) => {
+    try {
+        const { category } = req.query;
+        let query = { status: { $ne: 'Dihapus' } }; 
+        
+        if (category && category !== 'Semua') {
+            query.category = category;
         }
+
+        const products = await Product.find(query)
+            .populate('sellerId', 'name campus profilePicture isVerified isBanned') // 👈 TAMBAHKAN isBanned
+            .sort({ createdAt: -1 });
+            
+        res.status(200).json({ success: true, count: products.length, data: products });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.getProductById = async (req, res) => {
+    try {
+        const product = await Product.findOne({ _id: req.params.id, status: { $ne: 'Dihapus' } })
+            .populate('sellerId', 'name profilePicture campus rating domisili isVerified lastActive');
+            
+        if (!product) return res.status(404).json({ message: 'Barang tidak ditemukan' });
+        
+        res.status(200).json({ success: true, data: product });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.updateProduct = async (req, res) => {
+    try {
+        const { title, description, price, category, stock } = req.body;
+        let product = await Product.findById(req.params.id);
+
+        if (!product) return res.status(404).json({ success: false, message: 'Produk tidak ditemukan' });
+
+        if (product.sellerId.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Tidak diizinkan mengedit produk ini' });
+        }
+
+        if (title) product.title = title;
+        if (description) product.description = description;
+        if (price) product.price = price;
+        if (category) product.category = category;
+        
+        if (stock !== undefined) {
+            product.stock = stock;
+            if (product.stock > 0) {
+                product.status = 'Tersedia';
+            } else if (product.stock <= 0) {
+                product.status = 'Terjual';
+            }
+        }
+
+        let existingImages = req.body.existingImages || [];
+        if (typeof existingImages === 'string') existingImages = [existingImages]; 
+
+        let newImageUrls = [];
+        if (req.files && req.files.length > 0) {
+            newImageUrls = await Promise.all(
+                req.files.map(file => uploadToCloudinary(file.buffer, 'products'))
+            );
+        }
+
+        product.images = [...existingImages, ...newImageUrls];
+
+        if (product.images.length === 0) {
+            return res.status(400).json({ success: false, message: 'Barang minimal harus memiliki 1 gambar!' });
+        }
+
+        await product.save();
+        res.status(200).json({ success: true, data: product, message: 'Produk berhasil diperbarui!' });
+    } catch (error) {
+        console.error("ERROR UPDATE PRODUCT:", error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// FITUR BARU: Hapus Barang (Soft Delete)
+exports.deleteProduct = async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id);
+        if (!product) return res.status(404).json({ success: false, message: 'Barang tidak ditemukan' });
+
+        const isAdmin = req.user.role === 'admin';
+        const isOwner = product.sellerId.toString() === req.user.id;
+
+        if (!isOwner && !isAdmin) {
+            return res.status(403).json({ success: false, message: 'Tidak diizinkan' });
+        }
+
+        product.status = 'Dihapus'; // Soft delete
         await product.save();
 
-        // 🔔 NOTIFIKASI KE PEMBELI (BARU)
-        await Notification.create({
-            userId: buyerId,
-            title: 'Pesanan Dibuat! 🛒',
-            message: `Checkout untuk "${product.title}" berhasil. Silakan tunggu Admin memverifikasi pembayaran Anda.`,
-            type: 'TRANSACTION'
-        });
-
-        // 🔔 NOTIFIKASI KE PENJUAL
-        await Notification.create({
-            userId: product.sellerId,
-            title: 'Pesanan Baru Masuk! 📦',
-            message: `Barang Anda "${product.title}" telah dipesan. Menunggu Admin memverifikasi pembayaran pembeli.`,
-            type: 'TRANSACTION'
-        });
-
-        res.status(201).json({ success: true, transaction, message: 'Checkout berhasil, menunggu admin.' });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-};
-
-exports.updateStatus = async (req, res) => {
-    try {
-        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak. Hanya Admin!' });
-
-        const { status } = req.body; 
-        const transaction = await Transaction.findById(req.params.id).populate('productId');
-
-        if (!transaction) return res.status(404).json({ message: 'Transaksi tidak ditemukan' });
-
-        const oldStatus = transaction.status;
-        transaction.status = status;
-        await transaction.save();
-
-        const productTitle = transaction.productId ? transaction.productId.title : 'Barang (Dihapus)';
-
-        if (status === 'Selesai') {
-            if (transaction.productId) await Product.findByIdAndUpdate(transaction.productId._id, { status: 'Selesai' });
-        } else if (status === 'Dana Ditahan (Siap COD)') {
-            if (transaction.productId) await Product.findByIdAndUpdate(transaction.productId._id, { status: 'Dana Ditahan (Siap COD)' });
-            
-            // 🔔 NOTIFIKASI: UANG MASUK (SIAP COD)
-            if (oldStatus !== 'Dana Ditahan (Siap COD)') {
-                await Notification.create({ 
-                    userId: transaction.buyerId, 
-                    title: 'Pembayaran Diterima 💸', 
-                    message: `Pembayaran Anda untuk "${productTitle}" telah diverifikasi Admin. Silakan janjian COD dengan penjual!`, 
-                    type: 'TRANSACTION' 
-                });
-                await Notification.create({ 
-                    userId: transaction.sellerId, 
-                    title: 'Uang Telah Diamankan 🤝', 
-                    message: `Uang pembelian "${productTitle}" sudah ditahan sistem. Silakan ketemuan dan minta PIN pembeli untuk pencairan.`, 
-                    type: 'TRANSACTION' 
-                });
-            }
-        } else if (status === 'Sengketa') {
-            // 🔔 NOTIFIKASI: SENGKETA (BARU)
-            await Notification.create({ 
-                userId: transaction.buyerId, 
-                title: 'Transaksi Bersengketa ⚠️', 
-                message: `Transaksi untuk "${productTitle}" sedang ditangguhkan karena ada masalah/laporan. Admin sedang meninjau kasus ini.`, 
-                type: 'TRANSACTION' 
-            });
-            await Notification.create({ 
-                userId: transaction.sellerId, 
-                title: 'Transaksi Bersengketa ⚠️', 
-                message: `Pencairan dana untuk "${productTitle}" ditangguhkan karena ada laporan sengketa. Admin akan menghubungi Anda.`, 
-                type: 'TRANSACTION' 
-            });
-        }
-
-        res.status(200).json({ success: true, message: `Status diperbarui menjadi: ${status}` });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-};
-
-exports.getAllTransactions = async (req, res) => {
-    try {
-        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak.' });
-        
-        const transactions = await Transaction.find()
-            .populate('productId', 'title price images imageUrl')
-            .populate('buyerId', 'name email')
-            .populate('sellerId', 'name bankName bankAccount qrisUrl')
-            .sort({ createdAt: -1 });
-
-        res.status(200).json({ success: true, data: transactions });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-};
-
-exports.getMyTransactions = async (req, res) => {
-    try {
-        const userId = req.user.id;
-
-        let purchases = await Transaction.find({ buyerId: userId })
-            .populate('productId', 'title imageUrl images price') 
-            .populate('sellerId', 'name campus profilePicture')
-            .sort({ createdAt: -1 })
-            .lean(); 
-
-        let sales = await Transaction.find({ sellerId: userId })
-            .populate('productId', 'title imageUrl images price')
-            .populate('buyerId', 'name domisili profilePicture')
-            .sort({ createdAt: -1 })
-            .lean();
-
-        for (let i = 0; i < purchases.length; i++) {
-            let review = await Review.findOne({ transactionId: purchases[i]._id }).populate('buyerId', 'name profilePicture');
-            
-            if (!review && purchases[i].productId) {
-                review = await Review.findOne({ 
-                    productId: purchases[i].productId._id, 
-                    buyerId: userId 
-                }).populate('buyerId', 'name profilePicture');
-            }
-
-            purchases[i].review = review || null; 
-        }
-
-        res.status(200).json({ 
-            success: true, 
-            data: { purchases, sales } 
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-};
-
-exports.verifyCodPin = async (req, res) => {
-    try {
-        const { pin } = req.body;
-        const transaction = await Transaction.findById(req.params.id);
-
-        if (!transaction) return res.status(404).json({ message: 'Transaksi tidak ditemukan' });
-
-        if (transaction.sellerId.toString() !== req.user.id) {
-            return res.status(403).json({ message: 'Ditolak: Hanya penjual yang bisa memverifikasi PIN ini' });
-        }
-
-        if (transaction.status !== 'Dana Ditahan (Siap COD)') {
-            return res.status(400).json({ message: 'Status transaksi belum siap untuk COD' });
-        }
-
-        if (transaction.codPin !== pin) {
-            return res.status(400).json({ message: 'PIN SALAH! Pastikan Anda meminta PIN yang benar dari pembeli.' });
-        }
-
-        transaction.status = 'Selesai';
-        await transaction.save();
-
-        const product = await Product.findByIdAndUpdate(transaction.productId, { status: 'Selesai' });
-        const productTitle = product ? product.title : 'Barang';
-
-        // 🔔 NOTIFIKASI: COD SELESAI
-        await Notification.create({ 
-            userId: transaction.buyerId, 
-            title: 'Transaksi Selesai 🎯', 
-            message: `Barang "${productTitle}" telah Anda terima. Jangan lupa berikan ulasan ke penjual untuk membantu reputasinya!`, 
-            type: 'TRANSACTION' 
-        });
-        await Notification.create({ 
-            userId: transaction.sellerId, 
-            title: 'COD Berhasil 🎉', 
-            message: `PIN Benar! Dana penjualan "${productTitle}" akan segera diproses dan dicairkan oleh Admin ke rekening Anda.`, 
-            type: 'TRANSACTION' 
-        });
-
-        res.status(200).json({ 
-            success: true, 
-            message: '✅ PIN Valid! Transaksi Selesai. Admin akan segera meneruskan dana ke rekening Anda.' 
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-};
-
-exports.disburseFunds = async (req, res) => {
-    try {
-        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak.' });
-
-        const transaction = await Transaction.findById(req.params.id);
-        if (!transaction) return res.status(404).json({ message: 'Transaksi tidak ditemukan' });
-
-        if (transaction.status !== 'Selesai') {
-            return res.status(400).json({ message: 'Transaksi belum selesai (COD belum beres)!' });
-        }
-
-        transaction.status = 'Dana Dicairkan';
-        await transaction.save();
-
-        const product = await Product.findById(transaction.productId);
-        const productTitle = product ? product.title : 'Barang';
-
-        // 🔔 NOTIFIKASI: DANA DICAIRKAN ADMIN
-        await Notification.create({ 
-            userId: transaction.sellerId, 
-            title: 'Dana Telah Dicairkan 💰', 
-            message: `Hore! Dana penjualan "${productTitle}" sebesar Rp${(transaction.sellerIncome || transaction.price).toLocaleString('id-ID')} telah ditransfer Admin ke rekening Anda. Silakan cek mutasi Anda.`, 
-            type: 'TRANSACTION' 
-        });
-
-        res.status(200).json({ success: true, message: 'Status berhasil diubah menjadi Dana Dicairkan!' });
+        res.status(200).json({ success: true, message: 'Barang berhasil dihapus' });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }

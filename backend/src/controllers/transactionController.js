@@ -1,11 +1,11 @@
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 const Review = require('../models/Review');
+const Notification = require('../models/Notification'); // 🔔 IMPORT NOTIFIKASI
 const { uploadToCloudinary } = require('../middlewares/upload');
 
 exports.checkout = async (req, res) => {
     try {
-        // FITUR BARU: Tangkap paymentMethod dari frontend
         const { productId, paymentMethod } = req.body;
         const buyerId = req.user.id;
 
@@ -36,7 +36,6 @@ exports.checkout = async (req, res) => {
             sellerIncome,
             codPin,
             proofOfPayment: proofUrl,
-            // FITUR BARU: Simpan pilihan rekening admin ke database
             paymentMethod: paymentMethod || 'Transfer Bank (Default)' 
         });
 
@@ -47,6 +46,23 @@ exports.checkout = async (req, res) => {
             product.status = 'Tersedia'; 
         }
         await product.save();
+
+        // ==========================================
+        // 🔔 NOTIFIKASI CHECKOUT
+        // ==========================================
+        await Notification.create({
+            userId: buyerId,
+            title: 'Pesanan Dibuat! 🛒',
+            message: `Checkout untuk "${product.title}" berhasil. Silakan tunggu Admin memverifikasi pembayaran Anda.`,
+            type: 'TRANSACTION'
+        });
+
+        await Notification.create({
+            userId: product.sellerId,
+            title: 'Pesanan Baru Masuk! 📦',
+            message: `Barang Anda "${product.title}" telah dipesan. Menunggu Admin memverifikasi pembayaran pembeli.`,
+            type: 'TRANSACTION'
+        });
 
         res.status(201).json({ success: true, transaction, message: 'Checkout berhasil, menunggu admin.' });
     } catch (error) {
@@ -63,13 +79,50 @@ exports.updateStatus = async (req, res) => {
 
         if (!transaction) return res.status(404).json({ message: 'Transaksi tidak ditemukan' });
 
+        const oldStatus = transaction.status;
         transaction.status = status;
         await transaction.save();
 
+        const productTitle = transaction.productId ? transaction.productId.title : 'Barang (Dihapus)';
+
         if (status === 'Selesai') {
-            await Product.findByIdAndUpdate(transaction.productId._id, { status: 'Selesai' });
+            if (transaction.productId) await Product.findByIdAndUpdate(transaction.productId._id, { status: 'Selesai' });
         } else if (status === 'Dana Ditahan (Siap COD)') {
-            await Product.findByIdAndUpdate(transaction.productId._id, { status: 'Dana Ditahan (Siap COD)' });
+            if (transaction.productId) await Product.findByIdAndUpdate(transaction.productId._id, { status: 'Dana Ditahan (Siap COD)' });
+            
+            // ==========================================
+            // 🔔 NOTIFIKASI UANG MASUK KE ADMIN (SIAP COD)
+            // ==========================================
+            if (oldStatus !== 'Dana Ditahan (Siap COD)') {
+                await Notification.create({ 
+                    userId: transaction.buyerId, 
+                    title: 'Pembayaran Diterima 💸', 
+                    message: `Pembayaran Anda untuk "${productTitle}" telah diverifikasi Admin. Silakan janjian COD dengan penjual!`, 
+                    type: 'TRANSACTION' 
+                });
+                await Notification.create({ 
+                    userId: transaction.sellerId, 
+                    title: 'Uang Telah Diamankan 🤝', 
+                    message: `Uang pembelian "${productTitle}" sudah ditahan sistem. Silakan ketemuan dan minta PIN pembeli untuk pencairan.`, 
+                    type: 'TRANSACTION' 
+                });
+            }
+        } else if (status === 'Sengketa') {
+            // ==========================================
+            // 🔔 NOTIFIKASI SENGKETA
+            // ==========================================
+            await Notification.create({ 
+                userId: transaction.buyerId, 
+                title: 'Transaksi Bersengketa ⚠️', 
+                message: `Transaksi untuk "${productTitle}" sedang ditangguhkan karena ada masalah/laporan. Admin sedang meninjau kasus ini.`, 
+                type: 'TRANSACTION' 
+            });
+            await Notification.create({ 
+                userId: transaction.sellerId, 
+                title: 'Transaksi Bersengketa ⚠️', 
+                message: `Pencairan dana untuk "${productTitle}" ditangguhkan karena ada laporan sengketa. Admin akan menghubungi Anda.`, 
+                type: 'TRANSACTION' 
+            });
         }
 
         res.status(200).json({ success: true, message: `Status diperbarui menjadi: ${status}` });
@@ -162,7 +215,24 @@ exports.verifyCodPin = async (req, res) => {
         transaction.status = 'Selesai';
         await transaction.save();
 
-        await Product.findByIdAndUpdate(transaction.productId, { status: 'Selesai' });
+        const product = await Product.findByIdAndUpdate(transaction.productId, { status: 'Selesai' });
+        const productTitle = product ? product.title : 'Barang';
+
+        // ==========================================
+        // 🔔 NOTIFIKASI COD BERHASIL
+        // ==========================================
+        await Notification.create({ 
+            userId: transaction.buyerId, 
+            title: 'Transaksi Selesai 🎯', 
+            message: `Barang "${productTitle}" telah Anda terima. Jangan lupa berikan ulasan ke penjual untuk membantu reputasinya!`, 
+            type: 'TRANSACTION' 
+        });
+        await Notification.create({ 
+            userId: transaction.sellerId, 
+            title: 'COD Berhasil 🎉', 
+            message: `PIN Benar! Dana penjualan "${productTitle}" akan segera diproses dan dicairkan oleh Admin ke rekening Anda.`, 
+            type: 'TRANSACTION' 
+        });
 
         res.status(200).json({ 
             success: true, 
@@ -186,6 +256,19 @@ exports.disburseFunds = async (req, res) => {
 
         transaction.status = 'Dana Dicairkan';
         await transaction.save();
+
+        const product = await Product.findById(transaction.productId);
+        const productTitle = product ? product.title : 'Barang';
+
+        // ==========================================
+        // 🔔 NOTIFIKASI PENCAIRAN DANA
+        // ==========================================
+        await Notification.create({ 
+            userId: transaction.sellerId, 
+            title: 'Dana Telah Dicairkan 💰', 
+            message: `Hore! Dana penjualan "${productTitle}" sebesar Rp${(transaction.sellerIncome || transaction.price).toLocaleString('id-ID')} telah ditransfer Admin ke rekening Anda. Silakan cek mutasi Anda.`, 
+            type: 'TRANSACTION' 
+        });
 
         res.status(200).json({ success: true, message: 'Status berhasil diubah menjadi Dana Dicairkan!' });
     } catch (error) {

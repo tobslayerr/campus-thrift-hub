@@ -37,12 +37,17 @@ exports.createReview = async (req, res) => {
             images: imageUrls
         });
 
-        // 5. Kalkulasi Ulang Rating Penjual
-        const allReviews = await Review.find({ sellerId });
-        const totalRating = allReviews.reduce((acc, item) => acc + item.rating, 0);
-        const avgRating = totalRating / allReviews.length;
-        
-        await User.findByIdAndUpdate(sellerId, { rating: avgRating });
+        // 5. Kalkulasi Ulang Rating Penjual (Optimasi: Menggunakan Average dari Database)
+        const stats = await Review.aggregate([
+            { $match: { sellerId: transaction.sellerId } },
+            { $group: { _id: '$sellerId', avgRating: { $avg: '$rating' } } }
+        ]);
+
+        if (stats.length > 0) {
+            await User.findByIdAndUpdate(transaction.sellerId, { 
+                rating: stats[0].avgRating.toFixed(1) 
+            });
+        }
 
         // Return data yang dipopulate agar Frontend bisa langsung menampilkan UI ulasannya
         const populatedReview = await Review.findById(review._id).populate('buyerId', 'name profilePicture');
@@ -53,6 +58,7 @@ exports.createReview = async (req, res) => {
     }
 };
 
+// Ambil ulasan berdasarkan Produk
 exports.getProductReviews = async (req, res) => {
     try {
         const reviews = await Review.find({ productId: req.params.productId })
@@ -60,6 +66,42 @@ exports.getProductReviews = async (req, res) => {
             .sort({ createdAt: -1 });
             
         res.status(200).json({ success: true, data: reviews });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// --- TAMBAHAN BARU ---
+
+// Ambil semua ulasan milik seorang Penjual (untuk halaman Profil Penjual)
+exports.getSellerReviews = async (req, res) => {
+    try {
+        const { sellerId } = req.params;
+        const reviews = await Review.find({ sellerId })
+            .populate('buyerId', 'name profilePicture campus')
+            .populate('productId', 'name images') // Mengetahui produk mana yang diulas
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({ 
+            success: true, 
+            count: reviews.length,
+            data: reviews 
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Cek status apakah user bisa mengulas transaksi ini (untuk tombol di Frontend)
+exports.checkReviewStatus = async (req, res) => {
+    try {
+        const { transactionId } = req.params;
+        const review = await Review.findOne({ transactionId });
+        
+        res.status(200).json({ 
+            success: true, 
+            alreadyReviewed: !!review 
+        });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }

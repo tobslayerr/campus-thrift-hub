@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import api from '../../api/axios';
 import useAuthStore from '../../store/authStore';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Send, ShieldAlert, AlertTriangle, X, CheckCheck, Flag, ImagePlus } from 'lucide-react';
+import { ArrowLeft, Send, ShieldAlert, AlertTriangle, X, CheckCheck, Flag, ImagePlus, ShieldOff } from 'lucide-react';
 
 export default function ChatRoom() {
     const { id: targetUserId } = useParams(); 
@@ -21,36 +21,27 @@ export default function ChatRoom() {
     const [isTargetTyping, setIsTargetTyping] = useState(false);
     const typingTimeoutRef = useRef(null);
     
-    // ==========================================
     // REFS UNTUK SMART SCROLL
-    // ==========================================
     const messagesEndRef = useRef(null);
     const chatContainerRef = useRef(null);
-    const isAutoScrollActive = useRef(true); // Default true agar pertama kali load langsung ke bawah
+    const isAutoScrollActive = useRef(true);
 
     const [linkedProduct, setLinkedProduct] = useState(null);
     const [showWarningModal, setShowWarningModal] = useState(false);
 
-    // ==========================================
     // STATE SISTEM LAPORAN PENGGUNA
-    // ==========================================
     const [showReportModal, setShowReportModal] = useState(false);
     const [reportForm, setReportForm] = useState({ title: '', description: '', evidenceImage: null });
     const [reportPreview, setReportPreview] = useState(null);
     const [submittingReport, setSubmittingReport] = useState(false);
 
-    // ==========================================
-    // FUNGSI SMART SCROLL
-    // ==========================================
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
-    // Deteksi apakah user sedang scroll ke atas
     const handleScroll = () => {
         if (chatContainerRef.current) {
             const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-            // Jika jarak dari bawah kurang dari 150px, berarti user sedang di bawah
             const isAtBottom = scrollHeight - scrollTop - clientHeight < 150;
             isAutoScrollActive.current = isAtBottom;
         }
@@ -60,9 +51,10 @@ export default function ChatRoom() {
         const fetchInitialData = async () => {
             try {
                 const response = await api.get(`/users/seller/${targetUserId}`);
-                setTargetUser(response.data.data?.profile || response.data.data);
+                const profile = response.data.data?.profile || response.data.data;
+                setTargetUser(profile);
 
-                if (productIdQuery) {
+                if (productIdQuery && !profile.isBanned) {
                     const resProduct = await api.get(`/products/${productIdQuery}`);
                     setLinkedProduct(resProduct.data.data);
                     setInputText(`Halo kak, saya ingin bertanya tentang produk "${resProduct.data.data.title}" ini.`);
@@ -92,7 +84,6 @@ export default function ChatRoom() {
         return () => clearInterval(interval); 
     }, [targetUserId]);
 
-    // Hanya panggil scrollToBottom jika isAutoScrollActive bernilai true (User di bawah)
     useEffect(() => {
         if (isAutoScrollActive.current) {
             scrollToBottom();
@@ -115,21 +106,19 @@ export default function ChatRoom() {
         const phoneRegex = /(?:\+\s*62|62|0)[\s\-.]*8[0-9]{1,2}[\s\-.]?[0-9]{3,4}[\s\-.]?[0-9]{3,4}/g;
         const hasFiveDigits = /(\d[\s\-\\.,]*){5,}/.test(t);
         const hasBankKeyword = /\b(rek|rekening|norek|bca|bni|bri|mandiri|bsi|cimb|danamon|permata|mega|bjb|gopay|gpay|dana|ovo|shopeepay|spay|linkaja)\b/i.test(t);
-
         if (hasBankKeyword && hasFiveDigits) return true;
-
         const forbiddenPatterns = [
             /\b(pindah|lanjut|lewat|chat|hubungi)\s*(aja\s*)?(ke|di|via)?\s*(wa|whatsapp|w a|ig|instagram|tele|telegram|line)\b/i,
             /\b(ini|ni|nih|nomor|no)\s*(wa|whatsapp|w a|watsap)\b/i,
             /\b(wa|whatsapp|w a|w\.a|watsap|wea)\b/i,
             /\b(shopee|tokopedia|lazada|bukalapak|tiktok)\b/i
         ];
-        
         return phoneRegex.test(t) || forbiddenPatterns.some(pattern => pattern.test(t));
     };
 
     const handleInputChange = (e) => {
         setInputText(e.target.value);
+        if (targetUser?.isBanned) return;
         api.post('/messages/typing', { receiverId: targetUserId, isTyping: true }).catch(() => {});
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = setTimeout(() => {
@@ -139,12 +128,9 @@ export default function ChatRoom() {
 
     const handleSendMessage = async (e) => {
         e.preventDefault();
-        if (!inputText.trim()) return;
+        if (!inputText.trim() || targetUser?.isBanned) return;
 
         const textToSend = inputText;
-        const productObjToSend = linkedProduct; 
-        const productIdToSend = linkedProduct?._id || null;
-
         if (isSuspicious(textToSend)) {
             setShowWarningModal(true);
             return;
@@ -152,8 +138,6 @@ export default function ChatRoom() {
 
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         api.post('/messages/typing', { receiverId: targetUserId, isTyping: false }).catch(() => {});
-
-        // Paksa scroll ke bawah saat kita mengirim pesan
         isAutoScrollActive.current = true;
 
         const tempMessage = {
@@ -162,7 +146,7 @@ export default function ChatRoom() {
             receiverId: targetUserId,
             text: textToSend,
             message: textToSend,
-            productId: productObjToSend, 
+            productId: linkedProduct, 
             isRead: false,
             createdAt: new Date().toISOString()
         };
@@ -175,20 +159,16 @@ export default function ChatRoom() {
         try {
             await api.post('/messages', {
                 receiverId: targetUserId,
-                productId: productIdToSend,
+                productId: tempMessage.productId?._id || null,
                 text: textToSend,
                 message: textToSend 
             });
         } catch (error) {
             setMessages((prev) => prev.filter(m => m._id !== tempMessage._id));
             setInputText(textToSend);
-            if (productObjToSend) setLinkedProduct(productObjToSend);
-
-            if (error.response?.status === 403) {
-                setShowWarningModal(true);
-            } else {
-                toast.error('Gagal mengirim pesan.');
-            }
+            if (tempMessage.productId) setLinkedProduct(tempMessage.productId);
+            if (error.response?.status === 403) setShowWarningModal(true);
+            else toast.error('Gagal mengirim pesan.');
         }
     };
 
@@ -204,20 +184,15 @@ export default function ChatRoom() {
         e.preventDefault();
         if (!reportForm.title || !reportForm.description) return toast.error("Harap isi semua kolom!");
         if (!reportForm.evidenceImage) return toast.error("Harap lampirkan bukti foto!");
-
         setSubmittingReport(true);
         const toastId = toast.loading("Mengirim laporan ke Admin...");
-
         const formData = new FormData();
         formData.append('reportedUserId', targetUserId);
         formData.append('title', reportForm.title);
         formData.append('description', reportForm.description);
         formData.append('evidenceImage', reportForm.evidenceImage);
-
         try {
-            await api.post('/reports', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            await api.post('/reports', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
             toast.success("Laporan berhasil dikirim!", { id: toastId });
             setShowReportModal(false);
             setReportForm({ title: '', description: '', evidenceImage: null });
@@ -237,6 +212,7 @@ export default function ChatRoom() {
 
     const statusOnline = getOnlineStatus(targetUser.lastActive);
     const isOnlineNow = statusOnline === 'Online';
+    const isBanned = targetUser.isBanned;
 
     return (
         <div className="w-full flex flex-col h-[calc(100dvh-64px)] md:h-[calc(100vh-76px)] bg-[#F8FAFC]">
@@ -247,16 +223,24 @@ export default function ChatRoom() {
                     <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-slate-400 hover:text-[#00478F] hover:bg-slate-100 rounded-full transition-colors">
                         <ArrowLeft size={24} />
                     </button>
-                    <div className="relative cursor-pointer" onClick={() => navigate(`/seller/${targetUser._id}`)}>
-                        <img src={targetUser.profilePicture || `https://ui-avatars.com/api/?name=${targetUser.name || 'User'}&background=f1f5f9&color=00478F`} alt={targetUser.name} className="w-11 h-11 rounded-full object-cover ring-2 ring-slate-100" />
-                        {isOnlineNow && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>}
+                    <div className={`relative ${!isBanned ? 'cursor-pointer' : ''}`} onClick={() => !isBanned && navigate(`/seller/${targetUser._id}`)}>
+                        <img src={targetUser.profilePicture || `https://ui-avatars.com/api/?name=${targetUser.name || 'User'}&background=f1f5f9&color=00478F`} alt={targetUser.name} className={`w-11 h-11 rounded-full object-cover ring-2 ring-slate-100 ${isBanned ? 'grayscale opacity-50' : ''}`} />
+                        {isOnlineNow && !isBanned && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>}
                     </div>
-                    <div className="flex flex-col justify-center h-full cursor-pointer" onClick={() => navigate(`/seller/${targetUser._id}`)}>
-                        <h2 className="font-black text-slate-900 text-base leading-tight hover:text-[#00478F] transition-colors">{targetUser.name}</h2>
-                        {isTargetTyping ? (
-                            <p className="text-xs font-bold text-[#00478F] animate-pulse">Sedang mengetik...</p>
-                        ) : (
-                            <p className={`text-xs font-bold tracking-wide ${isOnlineNow ? 'text-green-500' : 'text-slate-400'}`}>{statusOnline}</p>
+                    <div className={`flex flex-col justify-center h-full ${!isBanned ? 'cursor-pointer' : ''}`} onClick={() => !isBanned && navigate(`/seller/${targetUser._id}`)}>
+                        <h2 className="font-black text-slate-900 text-base leading-tight">
+                            {isBanned ? (
+                                <span className="text-red-500 flex items-center gap-1 italic opacity-70">Banned User</span>
+                            ) : (
+                                <span className="hover:text-[#00478F] transition-colors">{targetUser.name}</span>
+                            )}
+                        </h2>
+                        {!isBanned && (
+                            isTargetTyping ? (
+                                <p className="text-xs font-bold text-[#00478F] animate-pulse">Sedang mengetik...</p>
+                            ) : (
+                                <p className={`text-xs font-bold tracking-wide ${isOnlineNow ? 'text-green-500' : 'text-slate-400'}`}>{statusOnline}</p>
+                            )
                         )}
                     </div>
                 </div>
@@ -266,14 +250,9 @@ export default function ChatRoom() {
                 </button>
             </div>
 
-            {/* AREA PESAN (SCROLLABLE DENGAN EVENT LISTENER) */}
-            <div 
-                ref={chatContainerRef}
-                onScroll={handleScroll}
-                className="flex-1 overflow-y-auto p-4 flex flex-col items-center"
-            >
+            {/* AREA PESAN */}
+            <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 flex flex-col items-center">
                 <div className="w-full max-w-4xl flex flex-col gap-4 relative">
-                    
                     <div className="bg-[#FF9500]/10 border border-[#FF9500]/20 text-[#FF9500] p-4 rounded-xl flex items-start gap-3 shadow-sm mx-auto w-full md:w-[80%] mb-4">
                         <ShieldAlert size={20} className="shrink-0 mt-0.5" />
                         <p className="text-xs md:text-sm font-bold leading-relaxed">
@@ -286,21 +265,16 @@ export default function ChatRoom() {
                         <div className="flex-1 flex flex-col justify-center items-center text-slate-400 mt-10">
                             <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 border border-slate-200"><Send size={32} className="text-slate-300 ml-1" /></div>
                             <p className="font-bold text-slate-600">Belum ada pesan.</p>
-                            <p className="text-sm font-medium">Sapa penjual untuk memulai negosiasi!</p>
                         </div>
                     ) : (
                         messages.map((msg) => {
                             const rawSender = msg.senderId || msg.sender; 
                             const msgSenderId = typeof rawSender === 'object' ? rawSender?._id : rawSender;
                             const isMe = String(msgSenderId) === String(myId);
-                            const textContent = msg.text || msg.message || "";
                             const prod = msg.productId || msg.product;
-                            const isReadStatus = msg.isRead;
-
                             return (
                                 <div key={msg._id || Math.random()} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[85%] md:max-w-[65%] px-5 py-3 text-[15px] leading-relaxed shadow-sm relative ${isMe ? 'bg-[#00478F] text-white rounded-[1.5rem] rounded-tr-sm' : 'bg-white border border-slate-200 text-slate-800 rounded-[1.5rem] rounded-tl-sm'}`}>
-                                        
+                                    <div className={`max-w-[85%] md:max-w-[65%] px-5 py-3 text-[15px] leading-relaxed shadow-sm relative ${isMe ? 'bg-[#00478F] text-white rounded-[1.5rem] rounded-tr-sm' : 'bg-white border border-slate-100 text-slate-800 rounded-[1.5rem] rounded-tl-sm'}`}>
                                         {prod && (
                                             <Link to={`/product/${prod._id || prod}`} className={`block mb-3 p-2.5 rounded-xl border transition-colors ${isMe ? 'bg-white/10 border-white/20 hover:bg-white/20' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
                                                 <div className="flex items-center gap-3">
@@ -312,12 +286,10 @@ export default function ChatRoom() {
                                                 </div>
                                             </Link>
                                         )}
-
-                                        <p className="whitespace-pre-wrap">{textContent}</p>
-                                        
+                                        <p className="whitespace-pre-wrap">{msg.text || msg.message || ""}</p>
                                         <div className={`text-[10px] mt-1.5 flex items-center gap-1 ${isMe ? 'text-blue-200 justify-end' : 'text-slate-400'}`}>
                                             {new Date(msg.createdAt).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
-                                            {isMe && <CheckCheck size={14} className={isReadStatus ? "text-green-300" : "text-blue-300/50"} />}
+                                            {isMe && <CheckCheck size={14} className={msg.isRead ? "text-green-300" : "text-blue-300/50"} />}
                                         </div>
                                     </div>
                                 </div>
@@ -333,7 +305,7 @@ export default function ChatRoom() {
                 <div className="w-full max-w-4xl flex flex-col gap-3">
                     
                     {linkedProduct && (
-                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between relative animate-in slide-in-from-bottom-4 shadow-sm">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between relative shadow-sm">
                             <div className="flex items-center gap-3">
                                 <img src={(linkedProduct.images && linkedProduct.images.length > 0) ? linkedProduct.images[0] : linkedProduct.imageUrl} className="w-12 h-12 rounded-lg object-cover bg-white border border-slate-200" alt="Produk" />
                                 <div>
@@ -341,65 +313,54 @@ export default function ChatRoom() {
                                     <p className="text-xs font-bold text-[#00478F]">Rp{linkedProduct.price.toLocaleString('id-ID')}</p>
                                 </div>
                             </div>
-                            <button type="button" onClick={() => { setLinkedProduct(null); setInputText(''); }} className="text-slate-400 hover:text-red-500 bg-white p-1.5 rounded-full shadow-sm border border-slate-200 hover:scale-110 transition-all">
+                            <button type="button" onClick={() => { setLinkedProduct(null); setInputText(''); }} className="text-slate-400 hover:text-red-500 bg-white p-1.5 rounded-full shadow-sm border border-slate-200">
                                 <X size={14}/>
                             </button>
                         </div>
                     )}
 
                     <form onSubmit={handleSendMessage} className="flex items-end gap-2 md:gap-3">
-                        <div className="flex-1 bg-slate-100 border border-slate-200 rounded-[2rem] flex items-center px-2 focus-within:border-[#00478F] focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-900/5 transition-all">
+                        <div className={`flex-1 border rounded-[2rem] flex items-center px-2 transition-all ${isBanned ? 'bg-slate-50 border-slate-200' : 'bg-slate-100 border-slate-200 focus-within:border-[#00478F] focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-900/5'}`}>
                             <input 
                                 type="text" 
                                 value={inputText}
                                 onChange={handleInputChange} 
-                                placeholder="Ketik pesan..." 
-                                className="w-full px-4 py-3.5 bg-transparent outline-none text-slate-700 font-medium placeholder:text-slate-400 text-sm md:text-base"
+                                disabled={isBanned}
+                                placeholder={isBanned ? "Akun ini telah diblokir (Banned User)" : "Ketik pesan..."} 
+                                className="w-full px-4 py-3.5 bg-transparent outline-none text-slate-700 font-medium placeholder:text-slate-400 text-sm md:text-base disabled:cursor-not-allowed"
                                 autoComplete="off"
                             />
                         </div>
-                        <button type="submit" disabled={!inputText.trim()} className="w-12 h-12 md:w-14 md:h-14 bg-[#00478F] text-white rounded-full flex items-center justify-center hover:bg-[#FF9500] transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+                        <button type="submit" disabled={!inputText.trim() || isBanned} className="w-12 h-12 md:w-14 md:h-14 bg-[#00478F] text-white rounded-full flex items-center justify-center hover:bg-[#FF9500] transition-all shadow-md active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed shrink-0">
                             <Send size={20} className="ml-1 md:ml-1.5" />
                         </button>
                     </form>
                 </div>
             </div>
 
-            {/* MODAL PERINGATAN FRAUD */}
+            {/* MODALS (Peringatan & Laporan) */}
             {showWarningModal && (
                 <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full text-center shadow-2xl animate-in zoom-in-95 duration-200 border-4 border-red-500">
-                        <div className="w-24 h-24 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
-                            <AlertTriangle size={48} strokeWidth={2.5} />
-                        </div>
+                    <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full text-center shadow-2xl border-4 border-red-500">
+                        <div className="w-24 h-24 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6"><AlertTriangle size={48} strokeWidth={2.5} /></div>
                         <h2 className="text-2xl font-black text-slate-900 mb-2">Pesan Diblokir!</h2>
-                        <p className="text-slate-600 text-sm font-medium leading-relaxed mb-6">
-                            Sistem mendeteksi Anda mencoba mengirim <b>Nomor HP, Rekening, atau Link Platform Lain</b>.
-                            <br/><br/>
-                            Demi keamanan, seluruh transaksi <b>WAJIB</b> diselesaikan di dalam platform Escrow Campus Thrift Hub.
-                        </p>
-                        <button type="button" onClick={() => setShowWarningModal(false)} className="w-full py-4 bg-red-500 text-white font-black rounded-xl hover:bg-red-600 transition-colors uppercase tracking-widest text-xs shadow-lg shadow-red-500/30">
-                            Saya Mengerti
-                        </button>
+                        <p className="text-slate-600 text-sm font-medium leading-relaxed mb-6">Sistem mendeteksi Anda mencoba mengirim <b>Nomor HP, Rekening, atau Link Platform Lain</b>.</p>
+                        <button type="button" onClick={() => setShowWarningModal(false)} className="w-full py-4 bg-red-500 text-white font-black rounded-xl hover:bg-red-600 transition-colors uppercase tracking-widest text-xs">Saya Mengerti</button>
                     </div>
                 </div>
             )}
 
-            {/* MODAL LAPORKAN PENGGUNA */}
             {showReportModal && (
                 <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2rem] p-6 md:p-8 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar animate-in zoom-in-95 duration-200">
+                    <div className="bg-white rounded-[2rem] p-6 md:p-8 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-black text-red-600 flex items-center gap-2"><AlertTriangle size={24}/> Laporkan Pengguna</h2>
                             <button onClick={() => setShowReportModal(false)} className="text-slate-400 hover:bg-slate-100 p-2 rounded-full"><X size={20}/></button>
                         </div>
-                        
-                        <p className="text-sm text-slate-500 font-medium mb-6">Laporkan jika akun ini melakukan penipuan, pelecehan, atau melanggar aturan komunitas.</p>
-
                         <form onSubmit={handleSubmitReport} className="space-y-4">
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-2">Jenis Pelanggaran</label>
-                                <select required value={reportForm.title} onChange={(e) => setReportForm({...reportForm, title: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-red-500 outline-none">
+                                <select required value={reportForm.title} onChange={(e) => setReportForm({...reportForm, title: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none">
                                     <option value="" disabled>Pilih Jenis Pelanggaran...</option>
                                     <option value="Penipuan / Fraud">Terindikasi Penipuan / Fraud</option>
                                     <option value="Pelecehan / Kata Kasar">Pelecehan / Kata-kata Kasar</option>
@@ -407,30 +368,27 @@ export default function ChatRoom() {
                                     <option value="Lainnya">Lainnya</option>
                                 </select>
                             </div>
-                            
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-2">Deskripsi Kejadian</label>
-                                <textarea required value={reportForm.description} onChange={(e) => setReportForm({...reportForm, description: e.target.value})} placeholder="Ceritakan detail kejadian..." className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-red-500 outline-none min-h-[100px]"></textarea>
+                                <textarea required value={reportForm.description} onChange={(e) => setReportForm({...reportForm, description: e.target.value})} placeholder="Ceritakan detail kejadian..." className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-medium outline-none min-h-[100px]"></textarea>
                             </div>
-
                             <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Upload Bukti (Opsional)</label>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Upload Bukti</label>
                                 {reportPreview ? (
                                     <div className="relative rounded-xl overflow-hidden border border-slate-200 mb-2">
                                         <img src={reportPreview} className="w-full h-32 object-cover" alt="preview" />
-                                        <button type="button" onClick={() => {setReportForm({...reportForm, evidenceImage: null}); setReportPreview(null);}} className="absolute top-2 right-2 bg-black/50 text-white p-1.5 rounded-lg hover:bg-red-500"><X size={16}/></button>
+                                        <button type="button" onClick={() => {setReportForm({...reportForm, evidenceImage: null}); setReportPreview(null);}} className="absolute top-2 right-2 bg-black/50 text-white p-1.5 rounded-lg"><X size={16}/></button>
                                     </div>
                                 ) : (
-                                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-red-50 hover:border-red-300 hover:text-red-500 cursor-pointer transition-colors text-slate-400">
+                                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 cursor-pointer text-slate-400">
                                         <ImagePlus size={28} className="mb-2" />
-                                        <span className="text-[10px] font-black uppercase tracking-widest">Pilih Gambar (Screenshot)</span>
+                                        <span className="text-[10px] font-black uppercase">Pilih Screenshot</span>
                                         <input type="file" accept="image/*" onChange={handleReportImageChange} className="hidden" />
                                     </label>
                                 )}
                             </div>
-
-                            <button type="submit" disabled={submittingReport} className="w-full py-4 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 uppercase tracking-widest text-xs shadow-lg shadow-red-500/30 transition-all mt-4 disabled:opacity-50">
-                                {submittingReport ? 'Mengirim Laporan...' : 'Kirim Laporan'}
+                            <button type="submit" disabled={submittingReport} className="w-full py-4 bg-red-600 text-white font-black rounded-xl hover:bg-red-700 uppercase tracking-widest text-xs disabled:opacity-50 mt-4">
+                                {submittingReport ? 'Mengirim...' : 'Kirim Laporan'}
                             </button>
                         </form>
                     </div>

@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+
+// Pastikan import ini namanya sama persis dengan yang di-eksport controller
 const { 
     createProduct, 
     getProducts, 
@@ -11,10 +13,6 @@ const {
 const { upload } = require('../middlewares/upload');
 const antiFraudFilter = require('../middlewares/antiFraud');
 const { protect } = require('../middlewares/authMiddleware');
-
-// ==========================================
-// DAFTAR ROUTES PRODUK
-// ==========================================
 
 // Route Publik
 router.get('/', getProducts);

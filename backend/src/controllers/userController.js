@@ -107,6 +107,7 @@ exports.banUser = async (req, res) => {
         if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
 
         user.isBanned = isBanned;
+        
         if (isBanned) {
             user.banReason = banReason;
             if (banDurationDays > 0) {
@@ -116,9 +117,24 @@ exports.banUser = async (req, res) => {
             } else {
                 user.banUntil = null; // Permanen
             }
+
+            // 🔥 FITUR BARU: SEMBUNYIKAN SEMUA PRODUK USER JIKA DI-BANNED
+            // Kita ubah status produk menjadi 'Dihapus' agar tidak muncul di beranda
+            await Product.updateMany(
+                { sellerId: user._id },
+                { $set: { status: 'Dihapus' } } 
+            );
+
         } else {
             user.banReason = null;
             user.banUntil = null;
+
+            // 🔄 OPSIONAL: KEMBALIKAN PRODUK MENJADI TERSEDIA JIKA BLOKIR DICABUT
+            // Ini akan mengaktifkan kembali produk yang sebelumnya disembunyikan oleh sistem
+            await Product.updateMany(
+                { sellerId: user._id, status: 'Dihapus' },
+                { $set: { status: 'Tersedia' } }
+            );
         }
 
         await user.save();
