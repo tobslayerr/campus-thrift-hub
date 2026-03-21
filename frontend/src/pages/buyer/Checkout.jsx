@@ -21,7 +21,6 @@ export default function Checkout() {
     const [submitting, setSubmitting] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
     
-    // State untuk zoom QRIS
     const [zoomQR, setZoomQR] = useState(null);
 
     useEffect(() => {
@@ -72,7 +71,10 @@ export default function Checkout() {
         const formData = new FormData();
         formData.append('productId', product._id);
         formData.append('paymentMethod', selectedMethod);
-        formData.append('proof', proofImage);
+        
+        // --- PERBAIKAN DI SINI ---
+        // Ganti 'proof' menjadi 'proofOfPayment' agar sesuai dengan backend
+        formData.append('proofOfPayment', proofImage); 
 
         try {
             await api.post('/transactions/checkout', formData, {
@@ -108,8 +110,6 @@ export default function Checkout() {
 
     return (
         <div className="max-w-5xl mx-auto p-4 md:p-10 pb-32">
-            
-            {/* MODAL ZOOM QRIS */}
             {zoomQR && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="relative max-w-lg w-full bg-white p-6 rounded-[2.5rem] shadow-2xl">
@@ -131,12 +131,12 @@ export default function Checkout() {
             </button>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                {/* SISI KIRI: INFO PRODUK */}
                 <div className="lg:col-span-5">
                     <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 sticky top-24">
                         <img 
                             src={(product.images && product.images.length > 0) ? product.images[0] : product.imageUrl} 
                             className="w-full aspect-square object-cover rounded-[2rem] mb-6 bg-slate-50 shadow-inner" 
+                            alt={product.title}
                         />
                         <div className="space-y-1">
                             <span className="text-[10px] font-black bg-[#FF9500]/10 text-[#FF9500] px-3 py-1 rounded-full uppercase tracking-widest inline-block">
@@ -151,14 +151,12 @@ export default function Checkout() {
                     </div>
                 </div>
 
-                {/* SISI KANAN: FORM PEMBAYARAN */}
                 <div className="lg:col-span-7">
                     <form onSubmit={handleCheckout} className="bg-white p-6 md:p-10 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
                         <h3 className="text-xl font-black text-slate-900 mb-8 flex items-center gap-3">
                             <CheckCircle className="text-green-500" /> Konfirmasi Pembayaran
                         </h3>
 
-                        {/* PILIHAN REKENING */}
                         <div className="space-y-4 mb-10">
                             {paymentMethods.length === 0 ? (
                                 <p className="text-slate-400 text-sm italic">Metode pembayaran belum tersedia.</p>
@@ -180,7 +178,6 @@ export default function Checkout() {
                                                     <p className="font-mono font-black text-[#00478F]">{method.accountNumber}</p>
                                                 </div>
 
-                                                {/* DESAIN QRIS PREMIUM */}
                                                 {isSelected && method.qrImageUrl && (
                                                     <div className="mt-6 pt-6 border-t border-blue-100 flex flex-col items-center animate-in zoom-in duration-300">
                                                         <div className="bg-white p-4 rounded-[2rem] shadow-xl border border-blue-100 relative group/qr">
@@ -204,7 +201,6 @@ export default function Checkout() {
                             )}
                         </div>
 
-                        {/* UPLOAD BUKTI */}
                         <div className="mb-10 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
                             <h3 className="text-xs font-black text-slate-900 mb-4 uppercase tracking-[0.2em] text-center">Upload Bukti Transfer</h3>
                             {previewProof ? (
