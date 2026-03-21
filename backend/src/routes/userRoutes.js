@@ -9,7 +9,7 @@ const { upload } = require('../middlewares/upload');
 
 router.get('/seller/:id', getSellerProfile);
 
-// Route Terproteksi menggunakan .fields() agar bisa upload banyak file
+// Route Terproteksi User
 router.put(
     '/profile', 
     protect, 
@@ -20,8 +20,8 @@ router.put(
     updateProfile
 );
 
+// Route Terproteksi Khusus Admin
 router.get('/admin/all', protect, getAllUsersForAdmin);
-
 router.put('/admin/ban/:id', protect, banUser);
 
 module.exports = router;
