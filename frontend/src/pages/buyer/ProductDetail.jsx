@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import useAuthStore from '../../store/authStore';
+import toast from 'react-hot-toast';
 import { 
     ArrowLeft, MessageSquare, ShieldCheck, 
-    Star, MapPin, School, ShoppingBag, 
-    ChevronRight, Clock, Award, PlusCircle
+    Star, MapPin, School, PlusCircle, 
+    ChevronRight, Clock, Award, Edit
 } from 'lucide-react';
 
 export default function ProductDetail() {
@@ -34,6 +35,7 @@ export default function ProductDetail() {
                 setReview(reviewRes.data.data);
             } catch (error) {
                 console.error("Gagal memuat detail", error);
+                toast.error("Gagal memuat data barang.");
             } finally {
                 setLoading(false);
             }
@@ -42,7 +44,7 @@ export default function ProductDetail() {
     }, [id]);
 
     if (loading) return (
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
             <div className="w-12 h-12 border-4 border-slate-100 border-t-[#00478F] rounded-full animate-spin"></div>
         </div>
     );
@@ -55,6 +57,7 @@ export default function ProductDetail() {
     const handleSubmitReview = async (e) => {
         e.preventDefault();
         setSubmittingReview(true);
+        const toastId = toast.loading('Mengirim ulasan...');
         try {
             const res = await api.post('/reviews', {
                 productId: product._id,
@@ -63,9 +66,9 @@ export default function ProductDetail() {
                 comment: commentForm
             });
             setReview(res.data.data);
-            alert('Ulasan berhasil dikirim!');
+            toast.success('Ulasan berhasil dikirim!', { id: toastId });
         } catch (error) {
-            alert(error.response?.data?.message || 'Gagal mengirim ulasan');
+            toast.error(error.response?.data?.message || 'Gagal mengirim ulasan', { id: toastId });
         } finally {
             setSubmittingReview(false);
         }
@@ -79,7 +82,7 @@ export default function ProductDetail() {
                     onClick={() => navigate(-1)} 
                     className="flex items-center gap-2 text-slate-500 font-bold hover:text-[#00478F] transition-colors"
                 >
-                    <ArrowLeft size={20} /> Kembali ke Katalog
+                    <ArrowLeft size={20} /> Kembali
                 </button>
             </div>
 
@@ -97,7 +100,7 @@ export default function ProductDetail() {
                             <img 
                                 src={product.imageUrl} 
                                 alt={product.title} 
-                                className={`w-full h-full object-contain max-h-[700px] transition-transform duration-700 group-hover:scale-110 ${product.status === 'Terjual' ? 'grayscale' : ''}`} 
+                                className={`w-full h-full object-contain max-h-[700px] transition-transform duration-700 group-hover:scale-105 ${product.status === 'Terjual' ? 'grayscale' : ''}`} 
                             />
                         </div>
                     </div>
@@ -110,7 +113,7 @@ export default function ProductDetail() {
                                     {product.category}
                                 </span>
                                 <div className="flex items-center gap-1 text-slate-400 text-xs font-bold">
-                                    <Clock size={14} /> 2 Jam yang lalu
+                                    <Clock size={14} /> Tersedia
                                 </div>
                             </div>
 
@@ -136,24 +139,35 @@ export default function ProductDetail() {
                                     <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#FF9500]">
                                         <Award size={18} />
                                     </div>
-                                    <span>Kondisi Barang Terverifikasi</span>
+                                    <span>Kondisi Barang Terverifikasi Pembeli saat COD</span>
                                 </div>
                             </div>
 
                             {/* TOMBOL AKSI UTAMA */}
                             {product.status === 'Tersedia' && (
-                                <div className="flex flex-col gap-4">
+                                <div className="flex flex-col gap-4 pt-6 border-t border-slate-100">
                                     {isMine ? (
-                                        <button onClick={() => navigate('/my-profile')} className="w-full py-5 bg-slate-100 text-slate-400 font-black rounded-2xl uppercase tracking-widest text-xs hover:bg-slate-200 transition-all">
-                                            Kelola Barang Jualan
-                                        </button>
+                                        <>
+                                            <Link 
+                                                to={`/edit-product/${product._id}`} 
+                                                className="w-full py-5 bg-[#FF9500] text-white flex items-center justify-center gap-2 font-black rounded-2xl shadow-xl shadow-orange-900/20 hover:scale-[1.02] active:scale-95 transition-all uppercase tracking-widest text-sm"
+                                            >
+                                                <Edit size={18} /> Edit Data Barang
+                                            </Link>
+                                            <button 
+                                                onClick={() => navigate('/my-profile')} 
+                                                className="w-full py-5 bg-slate-50 text-slate-400 font-black rounded-2xl uppercase tracking-widest text-xs hover:bg-slate-100 transition-all"
+                                            >
+                                                Kelola Profil Saya
+                                            </button>
+                                        </>
                                     ) : (
                                         <>
                                             <Link to={`/checkout/${product._id}`} className="w-full py-5 bg-[#00478F] text-white text-center font-black rounded-2xl shadow-xl shadow-blue-900/20 hover:bg-[#FF9500] hover:scale-[1.02] active:scale-95 transition-all uppercase tracking-widest text-sm">
                                                 Beli Sekarang
                                             </Link>
-                                            <Link to={`/chat/${product.sellerId._id}?product=${product._id}`} className="w-full py-5 bg-white text-[#00478F] text-center font-black rounded-2xl border-2 border-[#00478F] hover:bg-slate-50 transition-all uppercase tracking-widest text-sm">
-                                                Chat Penjual
+                                            <Link to={`/chat/${product.sellerId._id}?product=${product._id}`} className="w-full py-5 bg-white text-[#00478F] text-center font-black rounded-2xl border-2 border-[#00478F] hover:bg-slate-50 transition-all uppercase tracking-widest text-sm flex justify-center items-center gap-2">
+                                                <MessageSquare size={18} /> Chat Penjual
                                             </Link>
                                         </>
                                     )}
@@ -171,10 +185,10 @@ export default function ProductDetail() {
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
                                     <h4 className="font-black text-slate-900 group-hover:text-[#00478F] transition-colors">{product.sellerId.name}</h4>
-                                    <ShieldCheck size={14} className="text-blue-500" />
+                                    {isMine && <span className="bg-[#00478F] text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest">Anda</span>}
                                 </div>
                                 <div className="flex flex-col gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                    <span className="flex items-center gap-1"><School size={12} /> {product.sellerId.campus}</span>
+                                    <span className="flex items-center gap-1"><School size={12} /> {product.sellerId.campus || 'Kampus tidak diketahui'}</span>
                                     <span className="flex items-center gap-1 text-[#FF9500]"><Star size={12} fill="#FF9500" /> {product.sellerId.rating?.toFixed(1) || '5.0'} Seller Rating</span>
                                 </div>
                             </div>
@@ -196,7 +210,7 @@ export default function ProductDetail() {
                             </div>
                         </section>
 
-                        {/* SEKSI ULASAN (ELEGAN) */}
+                        {/* SEKSI ULASAN */}
                         <section>
                             <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
                                 <MessageSquare className="text-[#00478F]" size={20} /> Ulasan Pembeli
@@ -206,9 +220,9 @@ export default function ProductDetail() {
                                 <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden">
                                     <div className="absolute top-0 right-0 p-4 bg-[#FF9500]/5 text-[#FF9500] rounded-bl-3xl font-black text-[10px] uppercase">Verified Purchase</div>
                                     <div className="flex items-center gap-4 mb-6">
-                                        <img src={review.buyerId?.profilePicture || 'https://via.placeholder.com/150'} className="w-12 h-12 rounded-full border border-slate-100" alt="" />
+                                        <img src={review.buyerId?.profilePicture || 'https://via.placeholder.com/150'} className="w-12 h-12 rounded-full border border-slate-100 object-cover" alt="" />
                                         <div>
-                                            <p className="font-black text-slate-800">{review.buyerId?.name || 'Pembeli Anonim'}</p>
+                                            <p className="font-black text-slate-800">{review.buyerId?.name || 'Pembeli'}</p>
                                             <div className="flex text-[#FF9500] mt-0.5">
                                                 {[...Array(5)].map((_, i) => (
                                                     <Star key={i} size={14} fill={i < review.rating ? "#FF9500" : "none"} strokeWidth={2.5} />
@@ -267,13 +281,13 @@ export default function ProductDetail() {
                         </section>
                     </div>
 
-                    {/* --- KANAN BAWAH: REKOMENDASI LAIN (DUMMY/OPSIONAL) --- */}
+                    {/* --- KANAN BAWAH: REKOMENDASI / INFO --- */}
                     <div className="lg:col-span-5">
                         <div className="bg-[#FF9500] p-8 rounded-[2.5rem] text-white overflow-hidden relative">
                             <h4 className="text-xl font-black mb-2 relative z-10">Keamanan Escrow</h4>
-                            <p className="text-orange-100 text-sm font-medium relative z-10 mb-6">Uang Anda hanya akan cair ke penjual setelah Anda memasukkan PIN COD saat barang diterima.</p>
-                            <ShieldCheck size={120} className="absolute -bottom-8 -right-8 text-white/10 rotate-12" />
-                            <Link to="/how-it-works" className="relative z-10 bg-white text-[#FF9500] px-6 py-3 rounded-xl font-black text-xs hover:bg-brand-dark hover:text-white transition-all inline-block">Pelajari Selengkapnya</Link>
+                            <p className="text-orange-100 text-sm font-medium relative z-10 mb-6">Uang Anda hanya akan cair ke penjual setelah Anda memasukkan PIN COD saat barang diterima secara langsung.</p>
+                            <ShieldCheck size={120} className="absolute -bottom-8 -right-8 text-white/20 rotate-12" />
+                            <Link to="/how-it-works" className="relative z-10 bg-white text-[#FF9500] px-6 py-3 rounded-xl font-black text-xs hover:bg-slate-900 hover:text-white transition-all inline-block">Pelajari Selengkapnya</Link>
                         </div>
                     </div>
                 </div>

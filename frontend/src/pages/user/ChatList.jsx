@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
+import { MessageSquare, ChevronRight, Search, Clock } from 'lucide-react';
 
 export default function ChatList() {
     const [conversations, setConversations] = useState([]);
@@ -20,47 +21,97 @@ export default function ChatList() {
         fetchConversations();
     }, []);
 
-    if (loading) return <div className="text-center mt-20 font-bold">Memuat Kotak Masuk...</div>;
+    // LOADING STATE PREMIUM
+    if (loading) return (
+        <div className="flex justify-center items-center min-h-[60vh]">
+            <div className="w-12 h-12 border-4 border-slate-100 border-t-[#00478F] rounded-full animate-spin"></div>
+        </div>
+    );
 
     return (
-        <div className="max-w-4xl mx-auto p-4 md:p-8 pb-20 min-h-[80vh]">
-            <h1 className="text-3xl font-black text-gray-900 mb-8 flex items-center gap-3">
-                <span>💬</span> Kotak Masuk
-            </h1>
+        <div className="min-h-screen bg-[#F8FAFC] pb-32">
+            <div className="max-w-4xl mx-auto p-4 md:p-8 pt-10">
+                
+                {/* --- HEADER --- */}
+                <div className="mb-10">
+                    <h1 className="text-3xl md:text-4xl font-black text-slate-900 mb-2 flex items-center gap-4 tracking-tight">
+                        <div className="w-14 h-14 bg-[#00478F]/10 rounded-2xl flex items-center justify-center text-[#00478F]">
+                            <MessageSquare size={28} strokeWidth={2.5} />
+                        </div>
+                        Kotak Masuk
+                    </h1>
+                    <p className="text-slate-500 font-medium ml-[4.5rem]">Pesan dan negosiasi Anda dengan pengguna lain.</p>
+                </div>
 
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-                {conversations.length === 0 ? (
-                    <div className="p-12 text-center text-gray-400 font-bold">
-                        Anda belum memiliki obrolan dengan siapapun.
-                    </div>
-                ) : (
-                    <div className="divide-y divide-gray-100">
-                        {conversations.map((conv, index) => (
-                            <Link 
-                                key={index} 
-                                to={`/chat/${conv.user._id}`}
-                                className="flex items-center gap-4 p-5 hover:bg-gray-50 transition group"
-                            >
-                                <img 
-                                    src={conv.user.profilePicture || 'https://via.placeholder.com/150'} 
-                                    alt={conv.user.name} 
-                                    className="w-14 h-14 rounded-full object-cover border border-gray-200 group-hover:border-brand-yellow transition"
-                                />
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="font-black text-gray-900 text-lg group-hover:text-brand-yellow transition">
-                                        {conv.user.name}
-                                    </h4>
-                                    <p className="text-gray-500 text-sm truncate pr-4 font-medium">
-                                        {conv.lastMessage}
-                                    </p>
-                                </div>
-                                <div className="text-xs text-gray-400 font-bold">
-                                    {new Date(conv.updatedAt).toLocaleDateString('id-ID', { hour: '2-digit', minute:'2-digit' })}
-                                </div>
+                {/* --- LIST CONTAINER --- */}
+                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                    
+                    {/* EMPTY STATE */}
+                    {conversations.length === 0 ? (
+                        <div className="p-16 text-center flex flex-col items-center">
+                            <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+                                <MessageSquare size={40} className="text-slate-300" />
+                            </div>
+                            <h3 className="text-xl font-black text-slate-800 mb-2">Belum ada obrolan</h3>
+                            <p className="text-slate-400 font-medium">Mulai cari barang dan hubungi penjual untuk bernegosiasi.</p>
+                            <Link to="/" className="mt-8 px-8 py-3 bg-[#00478F] text-white font-black rounded-xl hover:bg-[#FF9500] transition-colors shadow-lg shadow-blue-900/20 active:scale-95">
+                                Eksplorasi Barang
                             </Link>
-                        ))}
-                    </div>
-                )}
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-slate-50">
+                            {conversations.map((conv, index) => {
+                                const opponent = conv.user || {};
+                                
+                                // Format Waktu
+                                const dateObj = new Date(conv.updatedAt);
+                                const timeString = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute:'2-digit' });
+                                const dateString = dateObj.toLocaleDateString('id-ID', { day:'numeric', month:'short' });
+
+                                return (
+                                    <Link 
+                                        key={index} 
+                                        to={`/chat/${opponent._id}`}
+                                        className="flex items-center gap-4 p-6 hover:bg-slate-50 transition-all duration-300 group"
+                                    >
+                                        {/* AVATAR */}
+                                        <div className="relative shrink-0">
+                                            <img 
+                                                src={opponent.profilePicture || `https://ui-avatars.com/api/?name=${opponent.name || 'User'}&background=f1f5f9&color=00478F`} 
+                                                alt={opponent.name} 
+                                                className="w-16 h-16 rounded-full object-cover border-2 border-transparent group-hover:border-[#FF9500] transition-colors"
+                                            />
+                                            {/* Indikator Online (Opsional / Dekoratif) */}
+                                            <div className="absolute bottom-1 right-1 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>
+                                        </div>
+
+                                        {/* CHAT INFO */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-baseline mb-1">
+                                                <h4 className="font-black text-slate-900 text-lg group-hover:text-[#00478F] transition-colors truncate pr-4">
+                                                    {opponent.name || 'User Tidak Diketahui'}
+                                                </h4>
+                                                <span className="shrink-0 text-xs font-bold text-slate-400 flex items-center gap-1">
+                                                    {dateString} <span className="text-[10px] text-slate-300">•</span> {timeString}
+                                                </span>
+                                            </div>
+                                            <p className="text-slate-500 text-sm truncate font-medium group-hover:text-slate-700 transition-colors">
+                                                {conv.lastMessage || 'Mengirim lampiran...'}
+                                            </p>
+                                        </div>
+
+                                        {/* CHEVRON ICON */}
+                                        <div className="shrink-0 ml-2">
+                                            <div className="w-10 h-10 rounded-full flex items-center justify-center text-slate-300 group-hover:bg-white group-hover:text-[#FF9500] group-hover:shadow-sm transition-all border border-transparent group-hover:border-slate-100">
+                                                <ChevronRight size={20} />
+                                            </div>
+                                        </div>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -27,14 +27,15 @@ exports.updateProfile = async (req, res) => {
         if (bankAccount !== undefined) user.bankAccount = bankAccount;
 
         // 3. Logika File dengan Pagar Keamanan
+        // Pastikan mengakses menggunakan bracket notation ['avatar'] dari multer fields
         if (req.files) {
-            if (req.files.avatar && req.files.avatar[0]) {
-                const avatarUrl = await uploadToCloudinary(req.files.avatar[0].buffer, 'avatars');
+            if (req.files['avatar'] && req.files['avatar'][0]) {
+                const avatarUrl = await uploadToCloudinary(req.files['avatar'][0].buffer, 'avatars');
                 user.profilePicture = avatarUrl;
             }
 
-            if (req.files.qris && req.files.qris[0]) {
-                const qrisUrl = await uploadToCloudinary(req.files.qris[0].buffer, 'qris_codes');
+            if (req.files['qris'] && req.files['qris'][0]) {
+                const qrisUrl = await uploadToCloudinary(req.files['qris'][0].buffer, 'qris_codes');
                 user.qrisUrl = qrisUrl;
             }
         }
@@ -43,18 +44,22 @@ exports.updateProfile = async (req, res) => {
         // Menggunakan .save() memastikan validasi custom 'this.role' berjalan normal tanpa crash!
         await user.save();
 
-        // 5. Hilangkan password sebelum dikembalikan ke Frontend
-        user.password = undefined;
+        // 5. PENYELESAIAN BUG FRONTEND:
+        // Ubah document Mongoose menjadi plain object JS agar aman dikirim via JSON
+        const userData = user.toObject();
+        
+        // Hapus password dari objek murni
+        delete userData.password;
 
+        // 6. Kirim respons yang sudah 100% bersih
         res.status(200).json({ 
             success: true, 
-            data: user, 
+            data: userData, 
             message: 'Profil dan data rekening berhasil diperbarui!' 
         });
 
     } catch (error) {
         console.error("❌ CRASH PADA UPDATE PROFILE:", error.message);
-        // PERBAIKAN: Ubah 'error' menjadi 'message' agar frontend bisa menampilkannya jika ada salah
         res.status(500).json({ success: false, message: error.message });
     }
 };

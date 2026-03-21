@@ -1,186 +1,188 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import useAuthStore from '../../store/authStore';
+import { MapPin, School, Star, ShieldCheck, ArrowRight, Edit, PackageSearch, PlusCircle } from 'lucide-react';
 
 export default function SellerProfile() {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { user } = useAuthStore(); 
-    
-    const [sellerInfo, setSellerInfo] = useState(null);
-    const [products, setProducts] = useState([]);
-    const [reviews, setReviews] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('katalog');
+    const { user } = useAuthStore();
 
-    // LOGIKA PINTAR: Cek apakah profil ini milik user yang sedang login
+    const [seller, setSeller] = useState(null);
+    const [products, setProducts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    
+    // STATE UNTUK KATEGORI FILTER
+    const [activeCategory, setActiveCategory] = useState('Semua');
+
     const isMyProfile = user?.id === id || user?._id === id;
 
     useEffect(() => {
-        const fetchSellerData = async () => {
+        const fetchProfile = async () => {
             try {
                 const response = await api.get(`/users/seller/${id}`);
-                setSellerInfo(response.data.data.profile);
+                setSeller(response.data.data.profile);
                 setProducts(response.data.data.products);
-                setReviews(response.data.data.reviews || []);
             } catch (error) {
-                console.error("Gagal memuat profil penjual", error);
+                console.error("Gagal memuat profil seller", error);
             } finally {
                 setLoading(false);
             }
         };
-        fetchSellerData();
+        fetchProfile();
     }, [id]);
 
     if (loading) return (
-        <div className="flex justify-center items-center mt-40">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-brand-yellow"></div>
+        <div className="flex justify-center items-center min-h-[60vh]">
+            <div className="w-12 h-12 border-4 border-slate-100 border-t-[#00478F] rounded-full animate-spin"></div>
         </div>
     );
     
-    if (!sellerInfo) return <div className="text-center mt-20 font-bold">Penjual tidak ditemukan.</div>;
+    if (!seller) return <div className="text-center mt-20 font-black text-slate-400">Pengguna tidak ditemukan.</div>;
+
+    // LOGIKA PINTAR: Mengambil kategori unik HANYA dari barang yang dijual seller ini
+    const availableCategories = ['Semua', ...new Set(products.map(p => p.category))];
+    
+    // Logika Filter Produk yang Ditampilkan
+    const displayedProducts = activeCategory === 'Semua' 
+        ? products 
+        : products.filter(p => p.category === activeCategory);
+
+    const ProductCard = ({ product }) => (
+        <div className="group bg-white rounded-[2rem] overflow-hidden border border-slate-100 hover:shadow-2xl hover:shadow-[#00478F]/10 hover:-translate-y-1 transition-all duration-500 flex flex-col h-full relative">
+            <div className="relative overflow-hidden aspect-[4/5] bg-slate-50">
+                {isMyProfile && (
+                    <Link 
+                        to={`/edit-product/${product._id}`} 
+                        className="absolute top-4 right-4 bg-white/90 backdrop-blur-md text-[#FF9500] p-3 rounded-2xl shadow-lg hover:bg-[#FF9500] hover:text-white transition-all z-20 hover:scale-110" 
+                        title="Edit Barang Ini"
+                    >
+                        <Edit size={18} />
+                    </Link>
+                )}
+                <Link to={`/product/${product._id}`}>
+                    <img 
+                        src={product.imageUrl} 
+                        alt={product.title} 
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                    />
+                </Link>
+                <div className="absolute inset-0 bg-[#00478F]/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none backdrop-blur-[2px] z-10">
+                    <span className="bg-white text-[#00478F] px-6 py-3 rounded-full font-black text-[10px] uppercase tracking-widest transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500 shadow-xl">
+                        Lihat Detail
+                    </span>
+                </div>
+            </div>
+            
+            <div className="p-6 flex flex-col flex-1">
+                <span className="text-[10px] font-black text-[#FF9500] uppercase tracking-widest bg-[#FF9500]/10 px-2 py-1 rounded-md w-max mb-3">
+                    {product.category}
+                </span>
+                <Link to={`/product/${product._id}`}>
+                    <h3 className="font-black text-slate-800 text-base line-clamp-2 leading-snug group-hover:text-[#00478F] transition-colors mb-4">
+                        {product.title}
+                    </h3>
+                </Link>
+                <div className="mt-auto flex items-center justify-between pt-5 border-t border-slate-100">
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Harga</span>
+                        <span className="font-black text-[#00478F] text-lg leading-none">
+                            Rp{product.price.toLocaleString('id-ID')}
+                        </span>
+                    </div>
+                    <Link 
+                        to={`/product/${product._id}`} 
+                        className="w-12 h-12 flex items-center justify-center bg-slate-50 text-slate-400 rounded-2xl hover:bg-[#00478F] hover:text-white transition-colors"
+                    >
+                        <ArrowRight size={20} />
+                    </Link>
+                </div>
+            </div>
+        </div>
+    );
 
     return (
-        <div className="max-w-7xl mx-auto p-4 md:p-8 pb-20">
-            <button onClick={() => navigate(-1)} className="mb-8 text-gray-500 font-bold hover:text-black flex items-center gap-2 transition">
-                ← Kembali
-            </button>
+        <div className="min-h-screen bg-[#F8FAFC] pb-32">
+            {/* HEADER PROFIL */}
+            <div className="bg-[#00478F] pt-20 pb-32 px-6 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-96 h-96 bg-white/5 rounded-full blur-[80px] -translate-x-1/2 -translate-y-1/2"></div>
+                <div className="absolute bottom-0 right-0 w-80 h-80 bg-[#FF9500]/20 rounded-full blur-[100px] translate-x-1/3 translate-y-1/3"></div>
 
-            {/* --- HEADER PROFIL (OLX STYLE) --- */}
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col md:flex-row items-center md:items-start gap-8 mb-12 relative overflow-hidden">
-                
-                {/* Efek Latar Belakang */}
-                <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-brand-yellow/20 to-transparent"></div>
-
-                <img 
-                    src={sellerInfo.profilePicture || 'https://via.placeholder.com/150'} 
-                    alt={sellerInfo.name} 
-                    className="w-32 h-32 md:w-40 md:h-40 rounded-full object-cover border-4 border-white shadow-xl ring-1 ring-gray-100 relative z-10"
-                />
-                
-                <div className="flex-1 text-center md:text-left relative z-10 pt-2">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                            <span className="text-[10px] font-black bg-green-100 text-green-700 px-3 py-1 rounded-md uppercase tracking-widest">
-                                Terverifikasi Kampus
-                            </span>
-                            
-                            {/* NAMA & BADGE "ANDA" */}
-                            <h1 className="text-4xl font-black text-gray-950 mt-3 flex items-center gap-3 justify-center md:justify-start">
-                                {sellerInfo.name}
-                                {isMyProfile && (
-                                    <span className="bg-brand-dark text-brand-yellow text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-widest translate-y-1">
-                                        Anda
-                                    </span>
-                                )}
-                            </h1>
-                        </div>
-
-                        {/* TOMBOL EDIT (HANYA MUNCUL JIKA PROFIL SENDIRI) */}
-                        {isMyProfile && (
-                            <Link 
-                                to="/my-profile" 
-                                className="inline-flex items-center justify-center gap-2 bg-white border-2 border-brand-dark text-brand-dark px-6 py-2.5 rounded-xl font-black hover:bg-brand-dark hover:text-brand-yellow transition-all shadow-sm"
-                            >
-                                <span>✏️</span> Edit Profil Saya
-                            </Link>
-                        )}
+                <div className="max-w-5xl mx-auto relative z-10 text-center flex flex-col items-center">
+                    <img src={seller.profilePicture || `https://ui-avatars.com/api/?name=${seller.name || 'User'}&background=f1f5f9&color=00478F`} alt={seller.name} className="w-32 h-32 rounded-full object-cover ring-4 ring-white/20 shadow-2xl mb-6 bg-white" />
+                    <h1 className="text-4xl font-black text-white mb-2 flex items-center gap-2 justify-center tracking-tight">
+                        {seller.name} {seller.isVerified && <ShieldCheck className="text-blue-300" size={24} title="Terverifikasi" />}
+                    </h1>
+                    <div className="flex flex-wrap justify-center items-center gap-4 text-blue-100 font-medium text-sm">
+                        <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full border border-white/10 backdrop-blur-sm"><School size={16} /> {seller.campus || 'Kampus tidak diketahui'}</span>
+                        <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full border border-white/10 backdrop-blur-sm"><MapPin size={16} /> {seller.domisili || 'Lokasi rahasia'}</span>
+                        <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full border border-white/10 backdrop-blur-sm text-[#FF9500] font-black"><Star size={16} fill="#FF9500"/> {seller.rating?.toFixed(1) || '5.0'}</span>
                     </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 mt-6 text-gray-700 font-semibold text-sm">
-                        <p className="flex items-center gap-2.5 justify-center md:justify-start">
-                            <span className="text-xl">🏢</span> {sellerInfo.campus}
-                        </p>
-                        <p className="flex items-center gap-2.5 justify-center md:justify-start text-gray-500">
-                            <span className="text-xl">📍</span> {sellerInfo.domisili}
-                        </p>
-                        <p className="flex items-center gap-2.5 justify-center md:justify-start mt-2 col-span-full">
-                            <span className="text-xl">⭐</span> 
-                            <span className="font-black text-gray-900">{sellerInfo.rating.toFixed(1)} / 5.0</span>
-                            <span className="text-xs text-gray-400 font-medium">(Berdasarkan transaksi Escrow)</span>
-                        </p>
-                    </div>
+
+                    {isMyProfile && (
+                        <button onClick={() => navigate('/my-profile')} className="mt-8 px-8 py-3 bg-white/10 backdrop-blur-md text-white border border-white/20 font-black rounded-full hover:bg-white hover:text-[#00478F] transition-all text-xs uppercase tracking-widest shadow-lg hover:scale-105 active:scale-95">
+                            Pengaturan Akun & Rekening
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* --- NAVIGASI TAB: KATALOG vs ULASAN --- */}
-            <div className="flex gap-6 border-b border-gray-200 mb-8 mt-10">
-                <button 
-                    onClick={() => setActiveTab('katalog')} 
-                    className={`pb-4 font-black text-lg transition-all ${activeTab === 'katalog' ? 'text-brand-dark border-b-4 border-brand-yellow' : 'text-gray-400 hover:text-gray-600'}`}
-                >
-                    Barang Dijual ({products.length})
-                </button>
-                <button 
-                    onClick={() => setActiveTab('ulasan')} 
-                    className={`pb-4 font-black text-lg transition-all ${activeTab === 'ulasan' ? 'text-brand-dark border-b-4 border-brand-yellow' : 'text-gray-400 hover:text-gray-600'}`}
-                >
-                    Ulasan Pembeli ({reviews.length})
-                </button>
-            </div>
-
-            {/* KONTEN TAB KATALOG */}
-            {activeTab === 'katalog' && (
-                products.length === 0 ? (
-                    <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl p-12 text-center">
-                        <p className="text-gray-400 font-bold italic">
-                            {isMyProfile ? 'Anda belum memiliki barang dagangan aktif.' : 'Penjual ini sedang tidak memiliki barang dagangan lain.'}
-                        </p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                        {products.map((product) => (
-                            <div key={product._id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group flex flex-col justify-between h-full">
-                                <Link to={`/product/${product._id}`}>
-                                    <div className="h-40 bg-gray-100 overflow-hidden relative">
-                                        <img src={product.imageUrl} alt={product.title} className="w-full h-full object-cover group-hover:scale-110 transition duration-500" />
-                                    </div>
-                                    <div className="p-4">
-                                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">{product.category}</p>
-                                        <h3 className="font-bold text-gray-800 text-sm line-clamp-2 leading-tight group-hover:text-brand-yellow transition">{product.title}</h3>
-                                    </div>
-                                </Link>
-                                <div className="p-4 pt-0 mt-auto">
-                                    <span className="font-black text-brand-dark text-lg block mb-3">
-                                        Rp {product.price.toLocaleString('id-ID')}
-                                    </span>
-                                    <Link to={`/product/${product._id}`} className="w-full block text-center bg-gray-900 text-white font-bold py-2.5 rounded-xl hover:bg-black transition text-xs shadow-md">
-                                        Lihat Detail
-                                    </Link>
-                                </div>
+            <main className="max-w-7xl mx-auto px-6 -translate-y-16 relative z-20">
+                <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 bg-[#FF9500]/10 rounded-2xl flex items-center justify-center text-[#FF9500] shadow-inner">
+                                <PackageSearch size={28} strokeWidth={2.5} />
                             </div>
-                        ))}
-                    </div>
-                )
-            )}
-
-            {/* KONTEN TAB ULASAN */}
-            {activeTab === 'ulasan' && (
-                reviews.length === 0 ? (
-                    <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl p-12 text-center text-gray-400 font-bold italic">
-                        Belum ada ulasan untuk penjual ini.
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        {reviews.map((rev) => (
-                            <div key={rev._id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex gap-4">
-                                <img 
-                                    src={rev.buyerId?.profilePicture || 'https://via.placeholder.com/150'} 
-                                    className="w-12 h-12 rounded-full object-cover border border-gray-200" 
-                                    alt="avatar" 
-                                />
-                                <div>
-                                    <h4 className="font-bold text-gray-900">{rev.buyerId?.name || 'Pembeli anonim'}</h4>
-                                    <p className="text-yellow-400 text-lg mb-2">{'★'.repeat(rev.rating)}{'☆'.repeat(5 - rev.rating)}</p>
-                                    <p className="text-gray-600 text-sm">"{rev.comment}"</p>
-                                    <p className="text-xs text-gray-400 mt-3 font-semibold">Dibeli: {rev.productId?.title || 'Produk dihapus'}</p>
-                                </div>
+                            <div>
+                                <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Lapak {isMyProfile ? 'Saya' : seller.name.split(' ')[0]}</h2>
+                                <p className="text-slate-500 text-sm font-medium mt-1">Total {products.length} barang aktif dijual.</p>
                             </div>
-                        ))}
+                        </div>
+                        {isMyProfile && (
+                            <Link to="/upload" className="flex items-center gap-2 bg-[#00478F] text-white px-6 py-3 rounded-xl font-black text-sm hover:bg-[#FF9500] transition-colors shadow-lg shadow-blue-900/20">
+                                <PlusCircle size={18} /> Tambah Barang
+                            </Link>
+                        )}
                     </div>
-                )
-            )}
+
+                    {/* FILTER KATEGORI DINAMIS */}
+                    {products.length > 0 && (
+                        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar mb-8 pb-2 border-b border-slate-100">
+                            {availableCategories.map((cat) => (
+                                <button 
+                                    key={cat}
+                                    onClick={() => setActiveCategory(cat)}
+                                    className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all whitespace-nowrap mb-4 ${
+                                        activeCategory === cat 
+                                        ? 'bg-[#00478F] text-white shadow-lg shadow-blue-900/20' 
+                                        : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-900 border border-slate-100'
+                                    }`}
+                                >
+                                    {cat}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {products.length === 0 ? (
+                        <div className="py-20 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                                <PackageSearch size={32} className="text-slate-300" />
+                            </div>
+                            <p className="text-slate-500 font-bold text-lg">Belum ada barang yang dijual saat ini.</p>
+                            {isMyProfile && <Link to="/upload" className="inline-block mt-4 text-[#FF9500] font-black hover:text-[#00478F] transition-colors underline underline-offset-4">Mulai Jual Barang Pertamamu</Link>}
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                            {displayedProducts.map((product) => (
+                                <ProductCard key={product._id} product={product} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </main>
         </div>
     );
 }

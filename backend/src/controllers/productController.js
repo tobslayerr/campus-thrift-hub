@@ -59,3 +59,37 @@ exports.getProductById = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+// @desc    Update Produk (Edit Barang)
+// @route   PUT /api/products/:id
+exports.updateProduct = async (req, res) => {
+    try {
+        const { title, description, price, category } = req.body;
+        let product = await Product.findById(req.params.id);
+
+        if (!product) return res.status(404).json({ success: false, message: 'Produk tidak ditemukan' });
+
+        // Keamanan: Pastikan yang edit adalah pemiliknya
+        if (product.sellerId.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: 'Tidak diizinkan mengedit produk ini' });
+        }
+
+        // Update teks
+        if (title) product.title = title;
+        if (description) product.description = description;
+        if (price) product.price = price;
+        if (category) product.category = category;
+
+        // Jika user upload foto baru, ganti fotonya
+        if (req.file) {
+            const imageUrl = await uploadToCloudinary(req.file.buffer, 'products');
+            product.imageUrl = imageUrl;
+        }
+
+        await product.save();
+        res.status(200).json({ success: true, data: product, message: 'Produk berhasil diperbarui!' });
+    } catch (error) {
+        console.error("ERROR UPDATE PRODUCT:", error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};

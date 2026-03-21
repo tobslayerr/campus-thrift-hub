@@ -3,11 +3,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/axios';
 import useAuthStore from '../../store/authStore';
+import toast from 'react-hot-toast';
+import { ArrowLeft, Send, ShieldAlert, AlertTriangle } from 'lucide-react';
 
 export default function ChatRoom() {
-    const { id: targetUserId } = useParams(); // ID lawan bicara
+    const { id: targetUserId } = useParams(); 
     const [searchParams] = useSearchParams();
-    const productId = searchParams.get('product'); // Opsional jika dari detail barang
+    const productId = searchParams.get('product'); 
     
     const { user } = useAuthStore();
     const navigate = useNavigate();
@@ -30,6 +32,7 @@ export default function ChatRoom() {
                 setTargetUser(response.data.data.profile);
             } catch (error) {
                 console.error("Gagal memuat profil lawan bicara");
+                toast.error("Gagal memuat profil pengguna.");
             }
         };
         fetchTargetUser();
@@ -39,7 +42,6 @@ export default function ChatRoom() {
     useEffect(() => {
         const fetchMessages = async () => {
             try {
-                // PERBAIKAN 1: Tambahkan /chat/ pada URL
                 const response = await api.get(`/messages/chat/${targetUserId}`);
                 setMessages(response.data.data);
             } catch (error) {
@@ -47,10 +49,10 @@ export default function ChatRoom() {
             }
         };
 
-        fetchMessages(); // Panggil pertama kali
-        const interval = setInterval(fetchMessages, 2000); // Polling per 2 detik
+        fetchMessages(); 
+        const interval = setInterval(fetchMessages, 2000); 
         
-        return () => clearInterval(interval); // Bersihkan interval saat keluar halaman
+        return () => clearInterval(interval); 
     }, [targetUserId]);
 
     // Scroll ke bawah setiap kali ada pesan baru
@@ -63,7 +65,7 @@ export default function ChatRoom() {
         if (!inputText.trim()) return;
 
         const textToSend = inputText;
-        setInputText(''); // Kosongkan input seketika agar UX cepat
+        setInputText(''); // Kosongkan input seketika agar UX terasa instan
 
         try {
             await api.post('/messages', {
@@ -73,54 +75,79 @@ export default function ChatRoom() {
             });
             // Pesan akan otomatis muncul di layar berkat interval polling
         } catch (error) {
-            alert('Gagal mengirim pesan');
+            toast.error('Gagal mengirim pesan. Periksa koneksi Anda.');
             setInputText(textToSend); // Kembalikan teks jika gagal
         }
     };
 
-    if (!targetUser) return <div className="text-center mt-20 font-bold">Memuat obrolan...</div>;
+    if (!targetUser) return (
+        <div className="flex justify-center items-center min-h-[60vh]">
+            <div className="w-12 h-12 border-4 border-slate-100 border-t-[#00478F] rounded-full animate-spin"></div>
+        </div>
+    );
 
     return (
-        <div className="max-w-3xl mx-auto p-4 md:p-8 h-[90vh] flex flex-col">
-            {/* Header Chat */}
-            <div className="bg-white p-4 rounded-t-3xl border border-gray-100 shadow-sm flex items-center gap-4 z-10">
-                <button onClick={() => navigate(-1)} className="text-xl p-2 hover:bg-gray-100 rounded-full transition">
-                    ←
+        <div className="max-w-3xl mx-auto p-4 md:p-6 h-[calc(100vh-80px)] md:h-[90vh] flex flex-col">
+            
+            {/* --- HEADER CHAT --- */}
+            <div className="bg-white p-4 rounded-t-[2rem] border border-slate-100 shadow-sm flex items-center gap-4 z-10">
+                <button 
+                    onClick={() => navigate(-1)} 
+                    className="p-2 text-slate-400 hover:text-[#00478F] hover:bg-slate-50 rounded-full transition-colors"
+                >
+                    <ArrowLeft size={24} />
                 </button>
-                <img src={targetUser.profilePicture || 'https://via.placeholder.com/150'} alt={targetUser.name} className="w-12 h-12 rounded-full object-cover border-2 border-brand-yellow" />
+                <div className="relative">
+                    <img 
+                        src={targetUser.profilePicture || `https://ui-avatars.com/api/?name=${targetUser.name || 'User'}&background=f1f5f9&color=00478F`} 
+                        alt={targetUser.name} 
+                        className="w-12 h-12 rounded-full object-cover ring-2 ring-slate-100" 
+                    />
+                    <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>
+                </div>
                 <div>
-                    <h2 className="font-black text-gray-900">{targetUser.name}</h2>
-                    <p className="text-xs text-green-500 font-bold flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full bg-green-500"></span> Online
+                    <h2 className="font-black text-slate-900 text-lg leading-tight">{targetUser.name}</h2>
+                    <p className="text-xs text-green-500 font-bold tracking-wide">
+                        Online
                     </p>
                 </div>
             </div>
 
-            {/* Area Pesan */}
-            <div className="flex-1 bg-gray-50 overflow-y-auto p-4 md:p-6 border-x border-gray-100 flex flex-col gap-4">
-                <div className="bg-brand-yellow/10 border border-brand-yellow text-brand-dark p-3 rounded-xl text-center text-xs font-bold mb-4 shadow-sm">
-                    ⚠️ Keamanan Escrow: Dilarang membagikan nomor WhatsApp. Sistem akan memblokir pesan yang mengandung nomor telepon demi keamanan transaksi Anda.
+            {/* --- AREA PESAN --- */}
+            <div className="flex-1 bg-slate-50 overflow-y-auto p-4 md:p-6 border-x border-slate-100 flex flex-col gap-4 no-scrollbar shadow-inner">
+                
+                {/* Peringatan Keamanan Escrow */}
+                <div className="bg-[#FF9500]/10 border border-[#FF9500]/20 text-[#FF9500] p-4 rounded-2xl flex items-start gap-3 shadow-sm mx-auto max-w-[90%] md:max-w-[80%] mb-4">
+                    <ShieldAlert size={20} className="shrink-0 mt-0.5" />
+                    <p className="text-xs md:text-sm font-bold leading-relaxed">
+                        <strong className="font-black uppercase tracking-wider block mb-1">Keamanan Escrow</strong>
+                        Dilarang membagikan nomor WhatsApp atau Rekening pribadi. Sistem akan menyensor pesan yang mengandung nomor telepon demi keamanan transaksi Anda.
+                    </p>
                 </div>
 
                 {messages.length === 0 ? (
-                    <div className="text-center text-gray-400 mt-10 font-medium text-sm">
-                        Belum ada pesan. Mulai percakapan sekarang!
+                    <div className="flex-1 flex flex-col justify-center items-center text-slate-400">
+                        <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 border border-slate-100">
+                            <Send size={32} className="text-slate-300 ml-1" />
+                        </div>
+                        <p className="font-bold">Belum ada pesan.</p>
+                        <p className="text-sm font-medium">Sapa penjual untuk memulai negosiasi!</p>
                     </div>
                 ) : (
                     messages.map((msg, index) => {
-                        // Cek kepemilikan pesan (aman untuk .id atau ._id)
                         const isMe = msg.senderId === user?.id || msg.senderId === user?._id;
-                        
-                        // PERBAIKAN 2: Deteksi semua kata "DISENSOR" agar teks nomor HP dan "wa" kena merah
                         const isCensored = msg.text.includes('DISENSOR');
 
                         return (
                             <div key={index} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[75%] p-4 rounded-2xl text-sm ${
-                                    isMe ? 'bg-brand-dark text-white rounded-tr-none' : 'bg-white border border-gray-200 text-gray-800 rounded-tl-none shadow-sm'
+                                <div className={`max-w-[80%] md:max-w-[70%] px-5 py-3 text-[15px] leading-relaxed shadow-sm relative ${
+                                    isMe 
+                                        ? 'bg-[#00478F] text-white rounded-[1.5rem] rounded-tr-sm' 
+                                        : 'bg-white border border-slate-100 text-slate-800 rounded-[1.5rem] rounded-tl-sm'
                                 }`}>
                                     {isCensored ? (
-                                        <span className={isMe ? 'text-red-400 font-bold' : 'text-red-600 font-bold'}>
+                                        <span className={`font-bold flex items-center gap-2 ${isMe ? 'text-red-300' : 'text-red-500'}`}>
+                                            <AlertTriangle size={16} className="shrink-0" />
                                             {msg.text}
                                         </span>
                                     ) : (
@@ -134,17 +161,24 @@ export default function ChatRoom() {
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Form */}
-            <form onSubmit={handleSendMessage} className="bg-white p-4 rounded-b-3xl border border-gray-100 shadow-sm flex gap-3">
-                <input 
-                    type="text" 
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Ketik pesan..." 
-                    className="flex-1 px-4 py-3 bg-gray-100 border-transparent rounded-xl focus:ring-2 focus:ring-brand-yellow focus:bg-white transition outline-none"
-                />
-                <button type="submit" className="bg-brand-yellow text-brand-dark px-6 py-3 rounded-xl font-black hover:bg-yellow-500 transition shadow-md">
-                    Kirim
+            {/* --- INPUT FORM --- */}
+            <form onSubmit={handleSendMessage} className="bg-white p-4 rounded-b-[2rem] border border-slate-100 shadow-sm flex items-end gap-3 z-10">
+                <div className="flex-1 bg-slate-50 border border-slate-200 rounded-3xl flex items-center px-2 focus-within:border-[#00478F] focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-900/5 transition-all">
+                    <input 
+                        type="text" 
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        placeholder="Ketik pesan..." 
+                        className="w-full px-4 py-3.5 bg-transparent outline-none text-slate-700 font-medium placeholder:text-slate-400"
+                        autoComplete="off"
+                    />
+                </div>
+                <button 
+                    type="submit" 
+                    disabled={!inputText.trim()}
+                    className="w-14 h-14 bg-[#FF9500] text-white rounded-full flex items-center justify-center hover:bg-[#00478F] transition-all shadow-lg shadow-orange-900/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                >
+                    <Send size={20} className="ml-1" />
                 </button>
             </form>
         </div>

@@ -7,11 +7,13 @@ const useAuthStore = create((set) => ({
     isLoading: false,
     error: null,
 
-    // Fungsi Login (Nanti disambungkan ke Backend Login)
+    // --- FUNGSI BARU: Untuk mengupdate data user (misal setelah edit profil) ---
+    setUser: (userData) => set({ user: userData }),
+
+    // Fungsi Login
     login: async (email, password) => {
         set({ isLoading: true, error: null });
         try {
-            // Catatan: Endpoint login belum kita buat di backend, ini persiapan strukturnya
             const response = await api.post('/auth/login', { email, password });
             const { user, token } = response.data;
             

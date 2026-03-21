@@ -29,6 +29,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/categories', require('./src/routes/categoryRoutes'));
 
 // Route Default / Home
 app.get('/', (req, res) => {

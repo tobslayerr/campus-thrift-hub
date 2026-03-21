@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast'; // IMPORT TOASTER DI SINI
 
 // Pages
 import Home from './pages/buyer/Home';
@@ -14,7 +15,8 @@ import AdminLogin from './pages/admin/AdminLogin';
 import ChatRoom from './pages/user/ChatRoom';
 import ChatList from './pages/user/ChatList';
 import MyTransactions from './pages/user/MyTransactions';
-import HowItWorks from './pages/HowItWorks'
+import HowItWorks from './pages/HowItWorks';
+
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
 import Navbar from './components/Navbar';
@@ -36,6 +38,19 @@ function LayoutManager({ children }) {
 function App() {
   return (
     <Router>
+        {/* KOMPONEN TOASTER WAJIB ADA DI SINI AGAR POP-UP MUNCUL DI SELURUH HALAMAN */}
+        <Toaster 
+            position="top-center" 
+            reverseOrder={false} 
+            toastOptions={{
+                duration: 4000,
+                style: {
+                    borderRadius: '16px',
+                    fontWeight: 'bold',
+                },
+            }}
+        />
+        
         <LayoutManager>
           <Routes>
             {/* RUTE MAHASISWA (PUBLIK) */}
@@ -44,6 +59,7 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/seller/:id" element={<SellerProfile />} />
+            <Route path="/how-it-works" element={<HowItWorks />} />
 
             {/* RUTE MAHASISWA (TERPROTEKSI) */}
             <Route path="/upload" element={<ProtectedRoute><UploadProduct /></ProtectedRoute>} />
@@ -52,7 +68,7 @@ function App() {
             <Route path="/chat/:id" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
             <Route path="/chats" element={<ProtectedRoute><ChatList /></ProtectedRoute>} />
             <Route path="/transactions" element={<ProtectedRoute><MyTransactions /></ProtectedRoute>} />
-            <Route path="/how-it-works" element={<HowItWorks />} />
+            <Route path="/edit-product/:id" element={<ProtectedRoute><UploadProduct /></ProtectedRoute>} />
             
             {/* RUTE ADMIN */}
             <Route path="/portal-auth-admin-x7y9z-2026" element={<AdminLogin />} />
