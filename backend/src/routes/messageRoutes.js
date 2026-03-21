@@ -1,15 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { sendMessage, getMessages, getConversations } = require('../controllers/messageController');
+const { sendMessage, getMessages, getConversations, setTypingStatus } = require('../controllers/messageController');
 const { protect } = require('../middlewares/authMiddleware');
 
 router.post('/', protect, sendMessage);
 
-// Rute Inbox (Daftar Chat) WAJIB DI ATAS
+// FITUR BARU: Rute Typing
+router.post('/typing', protect, setTypingStatus);
+
+// Rute Inbox (Daftar Chat)
 router.get('/conversations', protect, getConversations); 
 
 // Rute Detail Chat
-// Kita tambahkan /chat/ di depannya agar tidak bentrok dengan /conversations
 router.get('/chat/:receiverId', protect, getMessages); 
 
 module.exports = router;

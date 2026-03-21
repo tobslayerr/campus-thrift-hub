@@ -18,6 +18,9 @@ export default function ChatRoom() {
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
     const [targetUser, setTargetUser] = useState(null);
+    
+    const [isTargetTyping, setIsTargetTyping] = useState(false);
+    const typingTimeoutRef = useRef(null);
     const messagesEndRef = useRef(null);
 
     const [linkedProduct, setLinkedProduct] = useState(null);
@@ -27,7 +30,6 @@ export default function ChatRoom() {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
-    // 1. Ambil data lawan bicara & Produk terkait
     useEffect(() => {
         const fetchInitialData = async () => {
             try {
@@ -46,19 +48,14 @@ export default function ChatRoom() {
         if (targetUserId) fetchInitialData();
     }, [targetUserId, productIdQuery]);
 
-    // 2. Ambil riwayat pesan & Polling setiap 2 detik
     useEffect(() => {
         const fetchMessages = async () => {
             try {
-                // Sesuaikan endpoint dengan backend kamu, biasanya /messages/:id atau /chats/:id
                 const response = await api.get(`/messages/chat/${targetUserId}`);
-                
-                // PENGAMANAN DATA: Antisipasi bentuk response JSON yang berbeda
                 const fetchedMessages = response.data.data || response.data;
                 
-                if (Array.isArray(fetchedMessages)) {
-                    setMessages(fetchedMessages);
-                }
+                if (Array.isArray(fetchedMessages)) setMessages(fetchedMessages);
+                setIsTargetTyping(response.data.isTyping || false);
             } catch (error) {
                 console.error("Gagal mengambil pesan:", error);
             }
@@ -69,7 +66,6 @@ export default function ChatRoom() {
         return () => clearInterval(interval); 
     }, [targetUserId]);
 
-    // 3. Scroll otomatis
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
@@ -85,24 +81,39 @@ export default function ChatRoom() {
         return `Aktif ${Math.floor(diffHours / 24)} hari yang lalu`;
     };
 
-    // REGEX FRONTEND: BLOKIR KATA TERLARANG
+    // =======================================================
+    // REGEX FRONTEND BARU: LOGIKA TWO-FACTOR LEBIH KETAT
+    // =======================================================
     const isSuspicious = (text) => {
         const t = text.toLowerCase();
+        
         const phoneRegex = /(?:\+\s*62|62|0)[\s\-.]*8[0-9]{1,2}[\s\-.]?[0-9]{3,4}[\s\-.]?[0-9]{3,4}/g;
+        
+        // Deteksi Dua Faktor (Bank + Angka)
+        const hasFiveDigits = /(\d[\s\-\.,]*){5,}/.test(t);
+        const hasBankKeyword = /\b(rek|rekening|norek|bca|bni|bri|mandiri|bsi|cimb|danamon|permata|mega|bjb|gopay|gpay|dana|ovo|shopeepay|spay|linkaja)\b/i.test(t);
+
+        if (hasBankKeyword && hasFiveDigits) return true;
+
         const forbiddenPatterns = [
             /\b(pindah|lanjut|lewat|chat|hubungi)\s*(aja\s*)?(ke|di|via)?\s*(wa|whatsapp|w a|ig|instagram|tele|telegram|line)\b/i,
             /\b(ini|ni|nih|nomor|no)\s*(wa|whatsapp|w a|watsap)\b/i,
             /\b(wa|whatsapp|w a|w\.a|watsap|wea)\b/i,
-            /\b(rek|rekening|norek|bca|bni|bri|mandiri|bsi|cimb|danamon|permata|mega|bjb|gopay|gpay|dana|ovo|shopeepay|spay|linkaja)\b.{0,30}?\d{5,}/i,
-            /\b(transfer|tf)\s+(langsung|sekarang|aja|ke|rek|rekening|bank)\b/i,
-            /\b(minta|bagi|kirim)\s+(rek|rekening|norek)\b/i,
-            /\b(via|tf|transfer|pake|pakai|ke|bayar|topup|top\s?up)\s+(dana|ovo|gopay|gpay|shopeepay|spay|linkaja)\b/i,
             /\b(shopee|tokopedia|lazada|bukalapak|tiktok)\b/i
         ];
+        
         return phoneRegex.test(t) || forbiddenPatterns.some(pattern => pattern.test(t));
     };
 
-    // HANDLER KIRIM PESAN DENGAN OPTIMISTIC UI
+    const handleInputChange = (e) => {
+        setInputText(e.target.value);
+        api.post('/messages/typing', { receiverId: targetUserId, isTyping: true }).catch(() => {});
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+            api.post('/messages/typing', { receiverId: targetUserId, isTyping: false }).catch(() => {});
+        }, 2000);
+    };
+
     const handleSendMessage = async (e) => {
         e.preventDefault();
         if (!inputText.trim()) return;
@@ -111,19 +122,23 @@ export default function ChatRoom() {
         const productObjToSend = linkedProduct; 
         const productIdToSend = linkedProduct?._id || null;
 
+        // CEK REGEX FRONTEND
         if (isSuspicious(textToSend)) {
             setShowWarningModal(true);
             return;
         }
 
-        // Tampilkan di layar secara instan (OPTIMISTIC UI)
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        api.post('/messages/typing', { receiverId: targetUserId, isTyping: false }).catch(() => {});
+
         const tempMessage = {
             _id: `temp-${Date.now()}`,
             senderId: myId,
             receiverId: targetUserId,
             text: textToSend,
-            message: textToSend, // Pengamanan ganda
+            message: textToSend,
             productId: productObjToSend, 
+            isRead: false,
             createdAt: new Date().toISOString()
         };
 
@@ -131,16 +146,14 @@ export default function ChatRoom() {
         setInputText(''); 
         setLinkedProduct(null);
 
-        // KIRIM KE BACKEND (Double Key: text & message agar aman dengan schema apapun)
         try {
             await api.post('/messages', {
                 receiverId: targetUserId,
                 productId: productIdToSend,
                 text: textToSend,
-                message: textToSend // Backend akan menangkap mana saja yang cocok dengan schemanya
+                message: textToSend 
             });
         } catch (error) {
-            console.error("Error Send Message:", error);
             setMessages((prev) => prev.filter(m => m._id !== tempMessage._id));
             setInputText(textToSend);
             if (productObjToSend) setLinkedProduct(productObjToSend);
@@ -148,7 +161,7 @@ export default function ChatRoom() {
             if (error.response?.status === 403) {
                 setShowWarningModal(true);
             } else {
-                toast.error('Gagal mengirim pesan. Periksa jaringan Anda.');
+                toast.error('Gagal mengirim pesan.');
             }
         }
     };
@@ -174,9 +187,13 @@ export default function ChatRoom() {
                     <img src={targetUser.profilePicture || `https://ui-avatars.com/api/?name=${targetUser.name || 'User'}&background=f1f5f9&color=00478F`} alt={targetUser.name} className="w-12 h-12 rounded-full object-cover ring-2 ring-slate-100" />
                     {isOnlineNow && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full"></div>}
                 </div>
-                <div>
+                <div className="flex flex-col justify-center h-full">
                     <h2 className="font-black text-slate-900 text-lg leading-tight">{targetUser.name}</h2>
-                    <p className={`text-xs font-bold tracking-wide ${isOnlineNow ? 'text-green-500' : 'text-slate-400'}`}>{statusOnline}</p>
+                    {isTargetTyping ? (
+                        <p className="text-xs font-bold text-[#00478F] animate-pulse">Sedang mengetik...</p>
+                    ) : (
+                        <p className={`text-xs font-bold tracking-wide ${isOnlineNow ? 'text-green-500' : 'text-slate-400'}`}>{statusOnline}</p>
+                    )}
                 </div>
             </div>
 
@@ -199,33 +216,22 @@ export default function ChatRoom() {
                     </div>
                 ) : (
                     messages.map((msg) => {
-                        // PENGAMANAN GANDA: Cek siapa pengirimnya (mendukung populate object atau sekadar string ID)
                         const rawSender = msg.senderId || msg.sender; 
                         const msgSenderId = typeof rawSender === 'object' ? rawSender?._id : rawSender;
                         const isMe = String(msgSenderId) === String(myId);
-                        
-                        // PENGAMANAN GANDA: Tampilkan isi pesan walau backend menggunakan nama field yang berbeda
                         const textContent = msg.text || msg.message || "";
-                        
-                        // PENGAMANAN GANDA: Cek objek produk
                         const prod = msg.productId || msg.product;
+                        const isReadStatus = msg.isRead;
 
                         return (
+                            // eslint-disable-next-line react-hooks/purity
                             <div key={msg._id || Math.random()} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[80%] md:max-w-[70%] px-5 py-3 text-[15px] leading-relaxed shadow-sm relative ${isMe ? 'bg-[#00478F] text-white rounded-[1.5rem] rounded-tr-sm' : 'bg-white border border-slate-100 text-slate-800 rounded-[1.5rem] rounded-tl-sm'}`}>
                                     
-                                    {/* CARD PRODUK DI DALAM CHAT */}
                                     {prod && (
-                                        <Link 
-                                            to={`/product/${prod._id || prod}`} 
-                                            className={`block mb-3 p-3 rounded-xl border transition-colors ${isMe ? 'bg-white/10 border-white/20 hover:bg-white/20' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}
-                                        >
+                                        <Link to={`/product/${prod._id || prod}`} className={`block mb-3 p-3 rounded-xl border transition-colors ${isMe ? 'bg-white/10 border-white/20 hover:bg-white/20' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
                                             <div className="flex items-center gap-3">
-                                                <img 
-                                                    src={(prod.images && prod.images.length > 0) ? prod.images[0] : (prod.imageUrl || 'https://via.placeholder.com/150')} 
-                                                    alt="Produk" 
-                                                    className="w-12 h-12 object-cover rounded-lg bg-white border border-slate-200" 
-                                                />
+                                                <img src={(prod.images && prod.images.length > 0) ? prod.images[0] : (prod.imageUrl || 'https://via.placeholder.com/150')} alt="Produk" className="w-12 h-12 object-cover rounded-lg bg-white border border-slate-200" />
                                                 <div className="overflow-hidden">
                                                     <p className={`text-xs font-black truncate ${isMe ? 'text-white' : 'text-slate-800'}`}>{prod.title || 'Barang Dihapus'}</p>
                                                     <p className={`text-xs font-bold mt-0.5 ${isMe ? 'text-blue-200' : 'text-[#00478F]'}`}>Rp{prod.price?.toLocaleString('id-ID') || 0}</p>
@@ -234,12 +240,11 @@ export default function ChatRoom() {
                                         </Link>
                                     )}
 
-                                    {/* Teks Pesan Utama */}
                                     <p className="whitespace-pre-wrap">{textContent}</p>
                                     
-                                    <div className={`text-[9px] mt-1 flex items-center gap-1 ${isMe ? 'text-blue-200 justify-end' : 'text-slate-400'}`}>
+                                    <div className={`text-[10px] mt-1.5 flex items-center gap-1 ${isMe ? 'text-blue-200 justify-end' : 'text-slate-400'}`}>
                                         {new Date(msg.createdAt).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
-                                        {isMe && <CheckCheck size={12} />}
+                                        {isMe && <CheckCheck size={14} className={isReadStatus ? "text-green-300" : "text-blue-300/50"} />}
                                     </div>
                                 </div>
                             </div>
@@ -252,7 +257,6 @@ export default function ChatRoom() {
             {/* INPUT FORM BAWAH */}
             <div className="bg-white p-4 md:rounded-b-[2rem] border-t md:border border-slate-100 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] z-10">
                 
-                {/* PREVIEW PRODUK SEBELUM DIKIRIM (Berasal dari URL) */}
                 {linkedProduct && (
                     <div className="mb-3 p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between relative animate-in slide-in-from-bottom-4 shadow-sm">
                         <div className="flex items-center gap-3">
@@ -273,7 +277,7 @@ export default function ChatRoom() {
                         <input 
                             type="text" 
                             value={inputText}
-                            onChange={(e) => setInputText(e.target.value)}
+                            onChange={handleInputChange} 
                             placeholder="Ketik pesan dengan aman..." 
                             className="w-full px-4 py-3.5 bg-transparent outline-none text-slate-700 font-medium placeholder:text-slate-400"
                             autoComplete="off"
