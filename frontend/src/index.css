@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@100..900&display=swap');
+
+:root {
+  --brand-blue: #00478F;   /* Biru dari logo Anda */
+  --brand-orange: #FF9500; /* Orange dari logo Anda */
+}
+
+* {
+  font-family: 'Lexend Deca', sans-serif;
+}
+
+body {
+  background-color: #f8fafc; /* Abu sangat muda agar kontras dengan navbar putih */
+}

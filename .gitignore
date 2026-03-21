@@ -1,0 +1,16 @@
+# Dependency folders
+node_modules/
+
+# Environment variables (Data Sensitif)
+.env
+
+# Build folders
+frontend/dist/
+frontend/build/
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+npm-debug.log*
