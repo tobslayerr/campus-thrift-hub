@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import useAuthStore from '../../store/authStore';
-import { CheckCircle, AlertCircle, Image as ImageIcon, ArrowLeft, Maximize2, X, Smartphone } from 'lucide-react';
+import { CheckCircle, AlertCircle, Image as ImageIcon, ArrowLeft, Maximize2, X, Smartphone, Package, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Checkout() {
@@ -14,6 +14,13 @@ export default function Checkout() {
     const [product, setProduct] = useState(null);
     const [paymentMethods, setPaymentMethods] = useState([]);
     const [selectedMethod, setSelectedMethod] = useState('');
+    const [deliveryMethod, setDeliveryMethod] = useState('COD'); 
+    
+    // STATE ALAMAT PENGIRIMAN
+    const [shippingAddress, setShippingAddress] = useState('');
+    const [shippingPhone, setShippingPhone] = useState('');
+    const [shippingLocationPoint, setShippingLocationPoint] = useState('');
+
     const [proofImage, setProofImage] = useState(null);
     const [previewProof, setPreviewProof] = useState(null);
     
@@ -62,7 +69,14 @@ export default function Checkout() {
 
     const handleCheckout = async (e) => {
         e.preventDefault();
+        
+        // VALIDASI
         if (!selectedMethod) return toast.error('Pilih metode pembayaran!');
+        if (deliveryMethod === 'Pengiriman') {
+            if (!shippingAddress || !shippingPhone || !shippingLocationPoint) {
+                return toast.error('Harap lengkapi Alamat, Nomor Telepon, dan Titik Patokan!');
+            }
+        }
         if (!proofImage) return toast.error('Upload bukti transfer wajib diisi!');
 
         setSubmitting(true);
@@ -71,9 +85,15 @@ export default function Checkout() {
         const formData = new FormData();
         formData.append('productId', product._id);
         formData.append('paymentMethod', selectedMethod);
+        formData.append('deliveryMethod', deliveryMethod); 
         
-        // --- PERBAIKAN DI SINI ---
-        // Ganti 'proof' menjadi 'proofOfPayment' agar sesuai dengan backend
+        // Kirim data alamat jika metode pengiriman dipilih
+        if (deliveryMethod === 'Pengiriman') {
+            formData.append('buyerAddress', shippingAddress);
+            formData.append('buyerPhone', shippingPhone);
+            formData.append('buyerLocationPoint', shippingLocationPoint);
+        }
+
         formData.append('proofOfPayment', proofImage); 
 
         try {
@@ -153,7 +173,61 @@ export default function Checkout() {
 
                 <div className="lg:col-span-7">
                     <form onSubmit={handleCheckout} className="bg-white p-6 md:p-10 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
-                        <h3 className="text-xl font-black text-slate-900 mb-8 flex items-center gap-3">
+                        
+                        {/* METODE PENGIRIMAN */}
+                        <h3 className="text-xl font-black text-slate-900 mb-4 flex items-center gap-3">
+                            <Package className="text-blue-500" /> Metode Pengiriman
+                        </h3>
+                        <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                            <label className={`flex-1 p-5 rounded-2xl border-2 cursor-pointer transition-all ${deliveryMethod === 'COD' ? 'border-[#00478F] bg-blue-50/30' : 'border-slate-100 bg-slate-50 hover:border-slate-300'}`}>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <input type="radio" name="delivery" checked={deliveryMethod === 'COD'} onChange={() => setDeliveryMethod('COD')} className="w-4 h-4 accent-[#00478F]" />
+                                    <p className="font-black text-slate-800 text-sm uppercase tracking-widest flex items-center gap-1"><MapPin size={16} className="text-[#FF9500]"/> COD (Ketemuan)</p>
+                                </div>
+                                <p className="text-xs text-slate-500 font-medium pl-7">Aman, cek fisik barang langsung bersama penjual di area kampus.</p>
+                            </label>
+                            <label className={`flex-1 p-5 rounded-2xl border-2 cursor-pointer transition-all ${deliveryMethod === 'Pengiriman' ? 'border-[#00478F] bg-blue-50/30' : 'border-slate-100 bg-slate-50 hover:border-slate-300'}`}>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <input type="radio" name="delivery" checked={deliveryMethod === 'Pengiriman'} onChange={() => setDeliveryMethod('Pengiriman')} className="w-4 h-4 accent-[#00478F]" />
+                                    <p className="font-black text-slate-800 text-sm uppercase tracking-widest flex items-center gap-1"><Package size={16} className="text-blue-500"/> Ekspedisi (Kirim)</p>
+                                </div>
+                                <p className="text-xs text-slate-500 font-medium pl-7">Penjual akan mengirimkan barang via kurir (JNE/J&T/dll) ke alamat Anda.</p>
+                            </label>
+                        </div>
+
+                        {/* FORM ALAMAT (Hanya tampil jika Ekspedisi dipilih) */}
+                        {deliveryMethod === 'Pengiriman' && (
+                            <div className="mb-10 p-5 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-4 animate-in fade-in zoom-in duration-300">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <MapPin size={16} className="text-blue-500"/>
+                                    <h4 className="font-black text-slate-800 text-sm uppercase tracking-widest">Informasi Alamat</h4>
+                                </div>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1 ml-1">Alamat Lengkap</label>
+                                        <textarea placeholder="Nama Jalan, RT/RW, Kecamatan, Kota, Kode Pos" value={shippingAddress} onChange={(e) => setShippingAddress(e.target.value)} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:border-[#00478F] outline-none" rows="2" required></textarea>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1 ml-1">Titik Patokan / Maps</label>
+                                        <input type="text" placeholder="Warna rumah, patokan bangunan, atau link G-Maps" value={shippingLocationPoint} onChange={(e) => setShippingLocationPoint(e.target.value)} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:border-[#00478F] outline-none" required />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1 ml-1">Nomor Telepon (Aktif)</label>
+                                        <input type="tel" placeholder="081234567890" value={shippingPhone} onChange={(e) => setShippingPhone(e.target.value)} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:border-[#00478F] outline-none" required />
+                                    </div>
+                                </div>
+                                <div className="mt-4 p-3 bg-orange-50 border border-orange-100 rounded-xl flex items-start gap-3">
+                                    <AlertCircle size={16} className="text-[#FF9500] shrink-0 mt-0.5" />
+                                    <p className="text-xs font-medium text-slate-600 leading-relaxed">
+                                        <strong className="text-slate-800">Perhatian:</strong> Biaya ongkos kirim akan menyesuaikan dengan alamat Anda. <br/>(Sistem perhitungan ongkir otomatis segera hadir. Saat ini pembayaran ongkir dikoordinasikan langsung melalui fitur Chat dengan penjual).
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                        {deliveryMethod === 'COD' && <div className="mb-10"></div>}
+
+                        {/* METODE PEMBAYARAN */}
+                        <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
                             <CheckCircle className="text-green-500" /> Konfirmasi Pembayaran
                         </h3>
 

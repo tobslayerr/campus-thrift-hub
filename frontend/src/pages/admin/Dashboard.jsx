@@ -10,7 +10,7 @@ import {
     Tags, Plus, Trash2, LayoutDashboard, Edit2, X, Check, 
     ArrowLeftRight,
     AlertCircle, ShieldCheck, CreditCard, Building, ImagePlus, QrCode,
-    Users, Flag, ShieldBan, Menu, LogOut, ChevronLeft, ChevronRight, Eye, User, ImageIcon, HelpCircle, Loader2, RotateCcw, AlertTriangle
+    Users, Flag, ShieldBan, Menu, LogOut, ChevronLeft, ChevronRight, Eye, User, ImageIcon, HelpCircle, Loader2, RotateCcw, AlertTriangle, Package, MapPin
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -96,7 +96,7 @@ export default function Dashboard() {
     const handleVerifyPayment = (id) => {
         openConfirm(
             "Verifikasi Uang Masuk",
-            "Apakah Anda yakin dana sudah masuk ke rekening sistem? Aksi ini akan mengubah status transaksi menjadi siap COD.",
+            "Apakah Anda yakin dana sudah masuk ke rekening sistem? Aksi ini akan mengubah status transaksi menjadi siap COD/Dikirim.",
             async () => {
                 const toastId = toast.loading('Memverifikasi...');
                 try { await api.put(`/transactions/${id}/status`, { status: 'Dana Ditahan (Siap COD)' }); toast.success('Berhasil!', { id: toastId }); fetchTransactions(); } 
@@ -265,7 +265,7 @@ export default function Dashboard() {
                 <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto font-sans">
                     {[
                         { id: 'transaksi', icon: ArrowLeftRight, label: 'Transaksi' },
-                        { id: 'refund', icon: RotateCcw, label: 'Pengajuan Refund' }, // <--- TAMBAHAN TAB REFUND
+                        { id: 'refund', icon: RotateCcw, label: 'Pengajuan Refund' }, 
                         { id: 'pengguna', icon: Users, label: 'Manajemen Pengguna' },
                         { id: 'laporan', icon: Flag, label: 'Laporan & Sengketa' },
                         { id: 'rekening', icon: CreditCard, label: 'Rekening Escrow' },
@@ -313,7 +313,7 @@ export default function Dashboard() {
                             {activeTab === 'transaksi' && (
                                 <div className="space-y-6 animate-in fade-in duration-500">
                                     <div className="flex flex-wrap gap-2 mb-6">
-                                        {['Semua', 'Menunggu Verifikasi', 'Dana Ditahan (Siap COD)', 'Selesai', 'Dana Dicairkan'].map(status => (
+                                        {['Semua', 'Menunggu Verifikasi', 'Dana Ditahan (Siap COD)', 'Barang Dikirim', 'Selesai', 'Dana Dicairkan'].map(status => (
                                             <button key={status} onClick={() => {setStatusFilter(status); setCurrentPage(1);}} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === status ? 'bg-[#00478F] text-white shadow-md' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}>{status}</button>
                                         ))}
                                     </div>
@@ -334,7 +334,12 @@ export default function Dashboard() {
                                                                 
                                                                 {/* INFORMASI BARANG & PERHITUNGAN FEE (Diperbarui) */}
                                                                 <div>
-                                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Informasi Barang & Dana</span>
+                                                                    <div className="flex items-center gap-2 mb-2">
+                                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Informasi Barang & Dana</span>
+                                                                        <span className="bg-blue-50 text-[#00478F] border border-blue-100 font-mono text-[10px] font-black px-2 py-0.5 rounded-md tracking-wider">
+                                                                            {trx.transactionId || 'CTH-LEGACY'}
+                                                                        </span>
+                                                                    </div>
                                                                     <h4 className="font-black text-slate-900 text-lg line-clamp-1 mb-3">{trx.productId?.title || 'Barang Dihapus'}</h4>
                                                                     
                                                                     <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 mb-4">
@@ -353,8 +358,8 @@ export default function Dashboard() {
                                                                     </div>
 
                                                                     <div className="mt-2 space-y-2">
-                                                                        <p className="text-xs flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> <span className="font-bold text-slate-400">Pembeli:</span> <span className="font-black text-slate-700">{trx.buyerId?.name || 'User'}</span></p>
-                                                                        <p className="text-xs flex items-center gap-2"><span className="w-1.5 h-1.5 bg-orange-500 rounded-full"></span> <span className="font-bold text-slate-400">Penjual:</span> <span className="font-black text-slate-700">{trx.sellerId?.name || 'User'}</span></p>
+                                                                        <p className="text-xs flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> <span className="font-bold text-slate-400 w-16">Pembeli</span> <span className="font-black text-slate-700">: {trx.buyerId?.name || 'User'}</span></p>
+                                                                        <p className="text-xs flex items-center gap-2"><span className="w-1.5 h-1.5 bg-orange-500 rounded-full"></span> <span className="font-bold text-slate-400 w-16">Penjual</span> <span className="font-black text-slate-700">: {trx.sellerId?.name || 'User'}</span></p>
                                                                     </div>
                                                                 </div>
 
@@ -365,6 +370,44 @@ export default function Dashboard() {
                                                                         <div className={`px-4 py-2 rounded-xl border shadow-sm inline-block text-xs font-black uppercase tracking-widest ${isQRISMethod ? 'bg-orange-500 text-white border-orange-400' : 'bg-[#00478F] text-white border-blue-900'}`}>
                                                                             {isQRISMethod ? 'QRIS' : trx.paymentMethod || 'BANK'}
                                                                         </div>
+                                                                    </div>
+
+                                                                    {/* METODE PENGIRIMAN & ALAMAT (UNTUK ADMIN) */}
+                                                                    <div className="bg-slate-50 border border-slate-100 p-4 rounded-3xl relative overflow-hidden">
+                                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-2 block">Metode Pengiriman</span>
+                                                                        {trx.deliveryMethod === 'Pengiriman' ? (
+                                                                            <div>
+                                                                                <div className="px-3 py-1.5 rounded-lg border shadow-sm inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest bg-blue-100 text-blue-700 border-blue-200 mb-3">
+                                                                                    <Package size={12} /> Ekspedisi
+                                                                                </div>
+                                                                                <div className="space-y-2 border-t border-slate-200 pt-3">
+                                                                                    <div>
+                                                                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Alamat Pengiriman</p>
+                                                                                        <p className="text-xs font-bold text-slate-800 leading-relaxed">{trx.buyerAddress || 'Belum diatur'}</p>
+                                                                                    </div>
+                                                                                    <div className="grid grid-cols-2 gap-2">
+                                                                                        <div>
+                                                                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Patokan</p>
+                                                                                            <p className="text-xs font-bold text-slate-800 line-clamp-1">{trx.buyerLocationPoint || '-'}</p>
+                                                                                        </div>
+                                                                                        <div>
+                                                                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">No. Telepon</p>
+                                                                                            <p className="text-xs font-bold text-slate-800">{trx.buyerPhone || '-'}</p>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    {trx.shippingCourier && (
+                                                                                        <div className="mt-3 p-3 bg-blue-50/50 rounded-xl border border-blue-100">
+                                                                                            <p className="text-[9px] font-bold text-blue-500 uppercase tracking-wider">Resi ({trx.shippingCourier})</p>
+                                                                                            <p className="text-xs font-mono font-black text-blue-800 tracking-widest">{trx.shippingResi}</p>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="px-3 py-1.5 rounded-lg border shadow-sm inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest bg-orange-50 text-orange-600 border-orange-200">
+                                                                                <MapPin size={12} /> COD (Ketemuan)
+                                                                            </div>
+                                                                        )}
                                                                     </div>
 
                                                                     {/* Info Pencairan Dana */}
@@ -425,7 +468,7 @@ export default function Dashboard() {
                                 </div>
                             )}
 
-                            {/* TAB REFUND (BARU DITAMBAHKAN) */}
+                            {/* TAB REFUND */}
                             {activeTab === 'refund' && (
                                 <div className="space-y-6 animate-in fade-in duration-500">
                                     <div className="flex flex-wrap gap-2 mb-6">
@@ -448,13 +491,27 @@ export default function Dashboard() {
                                                         <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8">
                                                             {/* INFO KLAIM & ALASAN */}
                                                             <div>
-                                                                <span className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2 flex items-center gap-2"><AlertTriangle size={14}/> Klaim Refund 100%</span>
-                                                                <h4 className="font-black text-slate-900 text-lg line-clamp-1 mb-1">{trx.productId?.title || 'Barang Dihapus'}</h4>
-                                                                <span className="font-black text-red-600 text-2xl">Rp{trx.price.toLocaleString('id-ID')}</span>
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <span className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-2"><AlertTriangle size={14}/> Klaim Refund 100%</span>
+                                                                    <span className="bg-red-50 text-red-600 border border-red-100 font-mono text-[10px] font-black px-2 py-0.5 rounded-md tracking-wider">
+                                                                        {trx.transactionId || 'CTH-LEGACY'}
+                                                                    </span>
+                                                                </div>
+                                                                
+                                                                <h4 className="font-black text-slate-900 text-lg line-clamp-1 mb-2">{trx.productId?.title || 'Barang Dihapus'}</h4>
+                                                                <span className="font-black text-red-600 text-2xl block mb-4">Rp{trx.price.toLocaleString('id-ID')}</span>
+                                                                
+                                                                {/* TAMBAHAN INFORMASI PIHAK TERLIBAT */}
+                                                                <div className="space-y-2 mb-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Informasi Pihak Terlibat</p>
+                                                                    <p className="text-xs flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> <span className="font-bold text-slate-500 w-16">Pembeli</span> <span className="font-black text-slate-700">: {trx.buyerId?.name || 'User Tidak Diketahui'}</span></p>
+                                                                    <p className="text-xs flex items-center gap-2"><span className="w-1.5 h-1.5 bg-orange-500 rounded-full"></span> <span className="font-bold text-slate-500 w-16">Penjual</span> <span className="font-black text-slate-700">: {trx.sellerId?.name || 'User Tidak Diketahui'}</span></p>
+                                                                </div>
                                                                 
                                                                 <div className="mt-4 bg-red-50 p-4 rounded-2xl border border-red-100">
-                                                                    <p className="text-xs font-black text-slate-800 mb-1">{trx.cancelTitle}</p>
-                                                                    <p className="text-xs text-slate-600 italic">"{trx.cancelReason}"</p>
+                                                                    <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1 block">Alasan Refund</p>
+                                                                    <p className="text-sm font-black text-slate-800 mb-1">{trx.cancelTitle}</p>
+                                                                    <p className="text-xs text-slate-600 italic leading-relaxed">"{trx.cancelReason}"</p>
                                                                 </div>
                                                             </div>
 
@@ -705,7 +762,7 @@ export default function Dashboard() {
                 </main>
             </div>
 
-            {/* MODAL BAN USER (GAYA BARU) */}
+            {/* MODAL BAN USER */}
             {showBanModal && selectedUser && (
                 <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="bg-white rounded-[3rem] p-10 max-w-md w-full shadow-2xl border border-slate-100 animate-in zoom-in-95">
@@ -727,7 +784,7 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* MODAL PROSES LAPORAN (GAYA BARU) */}
+            {/* MODAL PROSES LAPORAN */}
             {showReportModal && selectedReport && (
                 <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="bg-white rounded-[3rem] p-10 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar animate-in zoom-in-95 border border-slate-100">
