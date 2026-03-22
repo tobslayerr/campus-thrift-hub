@@ -177,6 +177,10 @@ exports.getProductById = async (req, res) => {
             
         if (!product) return res.status(404).json({ message: 'Barang tidak ditemukan' });
         
+        // 🔥 FITUR BARU: Tambahkan 1 ke views setiap kali barang dilihat
+        product.views = (product.views || 0) + 1;
+        await product.save();
+        
         res.status(200).json({ success: true, data: product });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

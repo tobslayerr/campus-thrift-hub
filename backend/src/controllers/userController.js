@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Product = require('../models/Product');
 const Review = require('../models/Review');
+const Transaction = require('../models/Transaction'); // <--- PENTING UNTUK ANALITIK
 const { uploadToCloudinary } = require('../middlewares/upload');
 
 // @desc    Update Profil User (Termasuk Data Rekening & QRIS)
@@ -8,7 +9,6 @@ const { uploadToCloudinary } = require('../middlewares/upload');
 exports.updateProfile = async (req, res) => {
     try {
         const userId = req.user.id || req.user._id; 
-        // Tambahkan bankAccountName (Atas Nama) di destructuring req.body
         const { name, domisili, campus, bankName, bankAccount, bankAccountName } = req.body;
 
         const user = await User.findById(userId);
@@ -22,40 +22,31 @@ exports.updateProfile = async (req, res) => {
         if (domisili !== undefined) user.domisili = domisili;
         if (campus !== undefined) user.campus = campus;
 
-        // 2. Handle Upload Avatar (Terpisah dari logika rekening)
+        // 2. Handle Upload Avatar
         if (req.files && req.files['avatar'] && req.files['avatar'][0]) {
             const avatarUrl = await uploadToCloudinary(req.files['avatar'][0].buffer, 'avatars');
             user.profilePicture = avatarUrl;
         }
 
         // 3. --- LOGIKA EKSKLUSIF: BANK VS QRIS ---
-        
-        // CEK APAKAH ADA UPLOAD QRIS BARU
         const isUploadingQris = req.files && req.files['qris'] && req.files['qris'][0];
 
         if (isUploadingQris) {
-            // JIKA USER UPLOAD QRIS:
             const qrisUrl = await uploadToCloudinary(req.files['qris'][0].buffer, 'qris_codes');
             user.qrisUrl = qrisUrl;
-
-            // Paksa hapus semua data bank (Karena memilih QRIS)
             user.bankName = null;
             user.bankAccount = null;
             user.bankAccountName = null;
         } 
         else if (bankName || bankAccount || bankAccountName) {
-            // JIKA USER MENGISI DATA BANK (Dan tidak upload QRIS di request ini):
             user.bankName = bankName || user.bankName;
             user.bankAccount = bankAccount || user.bankAccount;
             user.bankAccountName = bankAccountName || user.bankAccountName;
-
-            // Paksa hapus data QRIS (Karena memilih input Bank manual)
             user.qrisUrl = null;
         }
 
         await user.save();
 
-        // Bersihkan data sensitif sebelum dikirim kembali
         const userData = user.toObject();
         delete userData.password;
 
@@ -83,12 +74,10 @@ exports.toggleWishlist = async (req, res) => {
 
         const index = user.wishlist.indexOf(productId);
         if (index > -1) {
-            // Hapus dari wishlist
             user.wishlist.splice(index, 1);
             await user.save();
             return res.status(200).json({ success: true, message: 'Dihapus dari wishlist', isSaved: false });
         } else {
-            // Tambahkan ke wishlist
             user.wishlist.push(productId);
             await user.save();
             return res.status(200).json({ success: true, message: 'Disimpan ke wishlist', isSaved: true });
@@ -113,7 +102,7 @@ exports.getWishlist = async (req, res) => {
 
         if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
 
-        res.status(200).json({ success: true, data: user.wishlist.reverse() }); // Terbaru di atas
+        res.status(200).json({ success: true, data: user.wishlist.reverse() });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -163,8 +152,6 @@ exports.getAllUsersForAdmin = async (req, res) => {
     try {
         if (req.user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak.' });
         
-        // PERBAIKAN FATAL: Cari semua yang BUKAN admin. 
-        // Ini memastikan user lama yang field role-nya kosong tetap terbaca.
         const users = await User.find({ role: { $ne: 'admin' } })
                                 .select('-password')
                                 .sort({ createdAt: -1 });
@@ -198,8 +185,6 @@ exports.banUser = async (req, res) => {
                 user.banUntil = null; // Permanen
             }
 
-            // 🔥 FITUR BARU: SEMBUNYIKAN SEMUA PRODUK USER JIKA DI-BANNED
-            // Kita ubah status produk menjadi 'Dihapus' agar tidak muncul di beranda
             await Product.updateMany(
                 { sellerId: user._id },
                 { $set: { status: 'Dihapus' } } 
@@ -209,8 +194,6 @@ exports.banUser = async (req, res) => {
             user.banReason = null;
             user.banUntil = null;
 
-            // 🔄 OPSIONAL: KEMBALIKAN PRODUK MENJADI TERSEDIA JIKA BLOKIR DICABUT
-            // Ini akan mengaktifkan kembali produk yang sebelumnya disembunyikan oleh sistem
             await Product.updateMany(
                 { sellerId: user._id, status: 'Dihapus' },
                 { $set: { status: 'Tersedia' } }
@@ -220,6 +203,68 @@ exports.banUser = async (req, res) => {
         await user.save();
         res.status(200).json({ success: true, message: `User ${isBanned ? 'diblokir' : 'diaktifkan kembali'}.` });
     } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// =================================================================
+// 📈 GET SELLER ANALYTICS (DIPERBAIKI)
+// =================================================================
+exports.getSellerAnalytics = async (req, res) => {
+    try {
+        const sellerId = req.user?.id || req.user?._id; 
+        
+        if (!sellerId) {
+            return res.status(401).json({ success: false, message: 'User tidak terautentikasi.' });
+        }
+
+        // 1. Hitung Pendapatan Bulan Ini
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+
+        // Menggunakan .lean() agar aman dari proxy Mongoose saat kalkulasi reduce
+        const thisMonthTransactions = await Transaction.find({
+            sellerId: sellerId,
+            status: { $in: ['Selesai', 'Dana Dicairkan'] },
+            updatedAt: { $gte: startOfMonth }
+        }).lean();
+
+        // Safe reduce: pastikan selalu berupa Number
+        const totalRevenueThisMonth = thisMonthTransactions.reduce((sum, trx) => {
+            const amount = Number(trx.sellerIncome) || Number(trx.price) || 0;
+            return sum + amount;
+        }, 0);
+
+        // 2. Hitung Total Views & Produk Aktif/Terjual
+        const products = await Product.find({ sellerId: sellerId }).lean();
+        
+        const totalViews = products.reduce((sum, p) => {
+            return sum + (Number(p.views) || 0);
+        }, 0);
+        
+        const activeProducts = products.filter(p => p.status === 'Tersedia').length;
+        const soldProducts = products.filter(p => p.status === 'Terjual' || p.status === 'Selesai').length;
+
+        // 3. Ambil 5 Produk Paling Banyak Dilihat
+        const topViewedProducts = await Product.find({ sellerId: sellerId, status: { $ne: 'Dihapus' } })
+            .sort({ views: -1 })
+            .limit(5)
+            .select('title views images price status')
+            .lean();
+
+        res.status(200).json({
+            success: true,
+            data: {
+                totalRevenueThisMonth,
+                totalViews,
+                activeProducts,
+                soldProducts,
+                topViewedProducts: topViewedProducts || []
+            }
+        });
+    } catch (error) {
+        console.error("🔥 CRASH PADA ANALYTICS:", error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 };

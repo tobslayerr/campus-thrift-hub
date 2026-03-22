@@ -61,6 +61,7 @@ export default function Home() {
     const displayedCampuses = filteredCampuses.slice((campusPage - 1) * campusesPerPage, campusPage * campusesPerPage);
 
     const renderProductCard = (product) => {
+        // Cek apakah barang ini milik user yang sedang login
         const isMyProduct = user && (product.sellerId?._id === user.id || product.sellerId === user.id);
 
         return (
@@ -70,6 +71,7 @@ export default function Home() {
                         <span className="bg-white/90 backdrop-blur-md text-[#00478F] px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm">
                             {product.category?.name || product.category || 'Barang'}
                         </span>
+                        {/* HINT BARANG MILIK SENDIRI */}
                         {isMyProduct && (
                             <span className="bg-[#FF9500] text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm">
                                 Milikmu
@@ -108,7 +110,6 @@ export default function Home() {
         <div className="min-h-screen bg-[#F8FAFC] pb-32">
             
             {/* HERO SECTION DENGAN SPASI NORMAL */}
-            {/* PERBAIKAN: Menghapus pb-48 agar tidak terlalu tinggi di bawah filter box */}
             <div className="bg-[#00478F] pt-24 pb-20 px-4 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-[100px]"></div>
                 <div className="max-w-4xl mx-auto relative z-10 text-center">
@@ -152,7 +153,6 @@ export default function Home() {
             </div>
 
             {/* SECTIONS BAWAH - KONTEN UTAMA */}
-            {/* PERBAIKAN: Menghapus -mt-20, memakai padding top yang natural agar spasi antar konten terjaga */}
             <div className="w-full bg-[#F8FAFC]">
                 <div className="max-w-6xl mx-auto px-4 py-16 space-y-20">
                     
@@ -237,6 +237,7 @@ export default function Home() {
                         ) : (
                             <div className="space-y-12">
                                 {topShops.map((shop, index) => {
+                                    // 🌟 CEK APAKAH INI TOKO MILIK USER SENDIRI
                                     const isMyShop = user && (shop.seller._id === user.id || shop.seller === user.id);
 
                                     return (
@@ -252,6 +253,7 @@ export default function Home() {
                                                         <h3 className="text-lg font-black text-slate-900 flex items-center gap-1.5 flex-wrap">
                                                             {shop.seller.name} 
                                                             {shop.seller.isVerified && <CheckCircle2 className="text-blue-500 shrink-0" size={16}/>}
+                                                            {/* 🌟 HINT TOKO MILIK SENDIRI 🌟 */}
                                                             {isMyShop && (
                                                                 <span className="bg-[#FF9500] text-white px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest ml-1 shadow-sm">Toko Anda</span>
                                                             )}
@@ -269,17 +271,30 @@ export default function Home() {
 
                                             {/* Daftar Produk Horizontal */}
                                             <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
-                                                {shop.products.map(product => (
-                                                    <div key={product._id} onClick={() => navigate(`/product/${product._id}`)} className="snap-start shrink-0 w-[180px] md:w-[200px] bg-slate-50 rounded-3xl overflow-hidden border border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all cursor-pointer group">
-                                                        <div className="w-full h-40 md:h-48 overflow-hidden bg-slate-200">
-                                                            <img src={(product.images && product.images.length > 0) ? product.images[0] : product.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={product.title} />
+                                                {shop.products.map(product => {
+                                                    // 🌟 CEK APAKAH BARANG DI TOKO INI MILIK USER SENDIRI
+                                                    const isMyShopProduct = user && (product.sellerId?._id === user.id || product.sellerId === user.id || shop.seller._id === user.id);
+
+                                                    return (
+                                                        <div key={product._id} onClick={() => navigate(`/product/${product._id}`)} className="relative snap-start shrink-0 w-[180px] md:w-[200px] bg-slate-50 rounded-3xl overflow-hidden border border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all cursor-pointer group">
+                                                            <div className="w-full h-40 md:h-48 overflow-hidden bg-slate-200">
+                                                                {/* 🌟 HINT BARANG MILIK SENDIRI DI CAROUSEL TOKO 🌟 */}
+                                                                {isMyShopProduct && (
+                                                                    <div className="absolute top-3 left-3 z-10">
+                                                                        <span className="bg-[#FF9500] text-white px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-md">
+                                                                            Milikmu
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                <img src={(product.images && product.images.length > 0) ? product.images[0] : product.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={product.title} />
+                                                            </div>
+                                                            <div className="p-4">
+                                                                <p className="text-sm font-bold text-slate-800 line-clamp-1 group-hover:text-[#00478F]">{product.title}</p>
+                                                                <p className="text-base font-black text-[#00478F] mt-1">Rp{product.price.toLocaleString('id-ID')}</p>
+                                                            </div>
                                                         </div>
-                                                        <div className="p-4">
-                                                            <p className="text-sm font-bold text-slate-800 line-clamp-1 group-hover:text-[#00478F]">{product.title}</p>
-                                                            <p className="text-base font-black text-[#00478F] mt-1">Rp{product.price.toLocaleString('id-ID')}</p>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                                 {/* Card Lihat Lainnya */}
                                                 <div onClick={() => navigate(`/seller/${shop.seller._id}`)} className="snap-start shrink-0 w-[120px] md:w-[150px] bg-slate-50 rounded-3xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 hover:border-[#00478F] transition-all text-slate-400 hover:text-[#00478F]">
                                                     <ArrowRight size={32} className="mb-2" />

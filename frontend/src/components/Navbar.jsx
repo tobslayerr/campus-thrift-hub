@@ -4,7 +4,7 @@ import useAuthStore from '../store/authStore';
 import api from '../api/axios';
 import { 
   Menu, X, MessageSquare, ClipboardList, 
-  PlusCircle, LogOut, User as UserIcon, Bell, Loader2, Heart 
+  PlusCircle, LogOut, User as UserIcon, Bell, Loader2, Heart, BarChart2 
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -80,6 +80,11 @@ export default function Navbar() {
                 
                 <NavLink to="/chats" className={navItemStyle}>
                   <MessageSquare size={18} /><span>Pesan</span>
+                </NavLink>
+
+                {/* 🌟 TOMBOL ANALITIK (DESKTOP) */}
+                <NavLink to="/seller/dashboard" className={navItemStyle} title="Analitik Toko">
+                  <BarChart2 size={18} className="group-hover:text-[#FF9500] transition-colors" /><span>Analitik</span>
                 </NavLink>
 
                 {/* 🌟 TOMBOL WISHLIST (DESKTOP) */}
@@ -164,6 +169,12 @@ export default function Navbar() {
               </div>
 
               <NavLink to="/transactions" onClick={toggleSidebar} className={navItemStyle}><ClipboardList size={22} /> <span>Riwayat Transaksi</span></NavLink>
+              
+              {/* 🌟 TOMBOL ANALITIK (MOBILE) */}
+              <NavLink to="/seller/dashboard" onClick={toggleSidebar} className={navItemStyle}>
+                <BarChart2 size={22} /> <span>Analitik Toko (Dashboard)</span>
+              </NavLink>
+
               <NavLink to="/chats" onClick={toggleSidebar} className={navItemStyle}><MessageSquare size={22} /> <span>Pesan Chat</span></NavLink>
               
               {/* 🌟 TOMBOL WISHLIST (MOBILE) */}

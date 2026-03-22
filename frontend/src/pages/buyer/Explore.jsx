@@ -251,17 +251,17 @@ export default function Explore() {
                     ) : (
                         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                             {products.map(product => {
-                                // Cek apakah ini barang milik user sendiri
+                                // 🌟 PENGECEKAN BARANG MILIK SENDIRI
                                 const isMyProduct = user && (product.sellerId?._id === user.id || product.sellerId === user.id);
 
                                 return (
-                                    <Link to={`/product/${product._id}`} key={product._id} className="group bg-white rounded-[2rem] overflow-hidden border border-slate-100 hover:border-blue-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-500 flex flex-col h-full relative">
+                                    <Link to={`/product/${product._id}`} key={product._id} className="group bg-white rounded-[2rem] overflow-hidden border border-slate-100 hover:shadow-2xl hover:-translate-y-1 transition-all duration-500 flex flex-col h-full">
                                         <div className="relative overflow-hidden aspect-[4/5] bg-slate-50">
                                             <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 items-start">
-                                                <span className="bg-white/90 backdrop-blur-md text-[#00478F] px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm">
+                                                <span className="bg-white/90 backdrop-blur-md text-[#00478F] px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm">
                                                     {product.category?.name || product.category || 'Barang'}
                                                 </span>
-                                                {/* HINT: Barang Milik Sendiri */}
+                                                {/* 🌟 HINT: BARANG MILIKMU 🌟 */}
                                                 {isMyProduct && (
                                                     <span className="bg-[#FF9500] text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm">
                                                         Milikmu
@@ -272,10 +272,10 @@ export default function Explore() {
                                         </div>
                                         <div className="p-4 md:p-5 flex flex-col flex-1">
                                             <h3 className="font-bold text-slate-800 text-sm line-clamp-2 mb-3 group-hover:text-[#00478F]">{product.title}</h3>
-                                            <div className="mt-auto flex items-end justify-between border-t border-slate-100 pt-3">
+                                            <div className="mt-auto flex items-end justify-between">
                                                 <span className="font-black text-[#00478F] text-lg">Rp{product.price.toLocaleString('id-ID')}</span>
                                             </div>
-                                            <div className="mt-2 pt-2 flex items-center justify-between gap-1.5 text-[10px] font-bold text-slate-400">
+                                            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-1.5 text-[10px] font-bold text-slate-400">
                                                 <div className="flex items-center gap-1 min-w-0">
                                                     <MapPin size={12} className="text-[#FF9500] shrink-0" />
                                                     <span className="truncate">{product.sellerId?.campus || 'Kampus Rahasia'}</span>

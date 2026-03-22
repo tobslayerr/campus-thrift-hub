@@ -31,7 +31,8 @@ import VerifyOTP from './pages/auth/VerifyOtp';
 import ResetPassword from './pages/auth/ResetPassword';
 
 // Halaman Baru
-import Wishlist from './pages/buyer/Wishlist'; // <--- IMPORT HALAMAN WISHLIST
+import Wishlist from './pages/buyer/Wishlist'; 
+import SellerDashboard from './pages/seller/SellerDashboard';
 
 // ---> IMPORT HALAMAN 404 <---
 import NotFound from './pages/NotFound';
@@ -49,6 +50,9 @@ function LayoutManager({ children }) {
     const isAdminLogin = location.pathname.startsWith('/portal-auth-admin');
     const isBannedArea = location.pathname === '/banned';
     
+    // 🔥 PERBAIKAN: Deteksi apakah user berada di halaman ChatRoom Spesifik
+    const isChatRoom = location.pathname.startsWith('/chat/');
+    
     // Halaman Auth (Login, Register, Lupa Password) yang tidak perlu footer
     const isAuthPage = 
         location.pathname === '/login' || 
@@ -65,10 +69,14 @@ function LayoutManager({ children }) {
     }
 
     return (
-        <div className={isAdminLogin ? "min-h-screen bg-slate-50 font-sans flex flex-col" : "min-h-screen bg-brand-light font-sans text-gray-900 flex flex-col"}>
-            {!isBannedArea && (isAdminLogin ? <AdminNavbar /> : <Navbar />)}
+        <div className={isAdminLogin ? "min-h-screen bg-slate-50 font-sans flex flex-col" : "min-h-screen bg-[#F8FAFC] font-sans text-gray-900 flex flex-col"}>
+            {/* Sembunyikan Navbar jika di ChatRoom */}
+            {!isBannedArea && !isChatRoom && (isAdminLogin ? <AdminNavbar /> : <Navbar />)}
+            
             <main className="flex-grow">{children}</main>
-            {!isBannedArea && !isAdminLogin && !isAuthPage && !isNotFound && <Footer />}
+            
+            {/* Sembunyikan Footer jika di ChatRoom */}
+            {!isBannedArea && !isAdminLogin && !isAuthPage && !isNotFound && !isChatRoom && <Footer />}
         </div>
     );
 }
@@ -109,7 +117,8 @@ function App() {
             <Route path="/checkout/:id" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
             <Route path="/my-profile" element={<ProtectedRoute><MyProfile /></ProtectedRoute>} />
             
-            <Route path="/wishlist" element={<ProtectedRoute><Wishlist /></ProtectedRoute>} /> {/* <--- TAMBAHKAN ROUTE WISHLIST DI SINI */}
+            <Route path="/wishlist" element={<ProtectedRoute><Wishlist /></ProtectedRoute>} /> 
+            <Route path="/seller/dashboard" element={<ProtectedRoute><SellerDashboard /></ProtectedRoute>} /> 
             
             <Route path="/chat/:id" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
             <Route path="/chats" element={<ProtectedRoute><ChatList /></ProtectedRoute>} />
