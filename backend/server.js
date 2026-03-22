@@ -72,6 +72,13 @@ io.on('connection', (socket) => {
     });
 });
 
+app.get('/', (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: "API Campus Thrift Hub berjalan dengan baik di Vercel Serverless!"
+    });
+});
+
 // Rute
 app.use('/api/auth', require('./src/routes/authRoutes'));
 app.use('/api/users', require('./src/routes/userRoutes'));
