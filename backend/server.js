@@ -10,7 +10,25 @@ connectDB();
 
 const app = express();
 
-app.use(cors());
+// 🌟 PERBAIKAN CORS UNTUK PRODUCTION 🌟
+// Pastikan url frontend Anda nanti didaftarkan di environment variable FRONTEND_URL
+const allowedOrigins = [
+    'http://localhost:5173', 
+    process.env.FRONTEND_URL 
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // Izinkan request tanpa origin (seperti mobile apps atau curl) ATAU origin yang terdaftar
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -18,9 +36,12 @@ app.use(express.urlencoded({ extended: true }));
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // Sesuaikan dengan domain frontend Anda saat production
-        methods: ["GET", "POST"]
-    }
+        origin: allowedOrigins,
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    // 🌟 PERBAIKAN: Tambahkan polling agar Socket.io bisa berjalan di lingkungan yang membatasi WebSocket murni
+    transports: ['websocket', 'polling'] 
 });
 
 // Jadikan io dan users Map bisa diakses dari controller

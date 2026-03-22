@@ -1,8 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-    // GANTI localhost menjadi 127.0.0.1
-    baseURL: 'http://127.0.0.1:5000/api', 
+    // Mengambil dari file .env atau Vercel Environment Variables
+    // Jika tidak ada, akan otomatis menggunakan localhost untuk development
+    baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000/api', 
     headers: {
         'Content-Type': 'application/json'
     }
