@@ -2,6 +2,7 @@ const Message = require('../models/Message');
 const Notification = require('../models/Notification'); // 🔔 IMPORT NOTIFIKASI
 const User = require('../models/User'); // Untuk mengambil nama pengirim
 const mongoose = require('mongoose');
+const sendEmail = require('../utils/sendEmail'); // 📧 IMPORT SEND EMAIL
 
 // In-memory cache ringan untuk melacak siapa yang sedang mengetik
 const typingCache = new Map(); 
@@ -28,7 +29,7 @@ exports.sendMessage = async (req, res) => {
         const messageData = {
             senderId,
             receiverId,
-            text: content.trim(), // <--- DISESUAIKAN DENGAN MODEL (text)
+            text: content.trim(), 
             isRead: false
         };
 
@@ -52,6 +53,69 @@ exports.sendMessage = async (req, res) => {
             const receiverSocketId = userSockets.get(receiverId);
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit('receive_message', populatedMessage);
+            }
+        }
+
+        // =========================================================================
+        // 🌟 7. LOGIKA NOTIFIKASI & EMAIL (DENGAN ANTI-SPAM COOLDOWN 5 MENIT) 🌟
+        // =========================================================================
+        const receiver = await User.findById(receiverId);
+        
+        if (receiver) {
+            // Cek kapan terakhir kali pengirim ini mengirim pesan ke penerima ini
+            const lastMessage = await Message.findOne({
+                senderId: senderId,
+                receiverId: receiverId,
+                _id: { $ne: newMessage._id } // Selain pesan yang baru saja dibuat
+            }).sort({ createdAt: -1 });
+
+            // Batas waktu cooldown (5 Menit)
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+            
+            // Kirim notifikasi HANYA JIKA ini pesan pertama, ATAU pesan sebelumnya dikirim > 5 menit yang lalu
+            let shouldSendNotification = true;
+            if (lastMessage && lastMessage.createdAt > fiveMinutesAgo) {
+                shouldSendNotification = false; 
+            }
+
+            if (shouldSendNotification) {
+                // A. Buat Notifikasi In-App (Di Tab Notifikasi)
+                const shortContent = content.length > 40 ? content.substring(0, 40) + '...' : content;
+                await Notification.create({
+                    userId: receiverId,
+                    title: `Pesan Baru dari ${populatedMessage.senderId.name} 💬`,
+                    message: `"${shortContent}"`,
+                    type: 'SYSTEM' // <--- PERBAIKAN: Menggunakan enum valid 'SYSTEM' bukan 'INFO'
+                });
+
+                // B. Kirim Notifikasi ke Email
+                if (receiver.email) {
+                    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+                    const emailHtml = `
+                        <div style="font-family: sans-serif; border: 1px solid #e2e8f0; padding: 30px; border-radius: 16px; max-w: 600px; margin: 0 auto;">
+                            <h2 style="color: #00478F; margin-top: 0;">Pesan Baru di Campus Thrift Hub</h2>
+                            <p style="color: #334155; font-size: 16px;">Halo <strong>${receiver.name}</strong>,</p>
+                            <p style="color: #334155; font-size: 16px;">Anda baru saja mendapat pesan dari <strong>${populatedMessage.senderId.name}</strong>:</p>
+                            
+                            <div style="background: #f8fafc; padding: 20px; border-left: 4px solid #FF9500; margin: 24px 0; border-radius: 0 12px 12px 0; font-style: italic; color: #475569; font-size: 16px;">
+                                "${content}"
+                            </div>
+                            
+                            <p style="color: #334155; font-size: 14px; margin-bottom: 24px;">Silakan login ke aplikasi untuk membalas pesan ini agar transaksi berjalan lancar.</p>
+                            
+                            <a href="${frontendUrl}/chat/${senderId}" style="display: inline-block; background-color: #00478F; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 14px;">Balas Pesan Sekarang</a>
+                            
+                            <p style="color: #94a3b8; font-size: 12px; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 16px;">Email ini dikirim secara otomatis oleh sistem Campus Thrift Hub.</p>
+                        </div>
+                    `;
+
+                    // Kirim secara asynchronous agar tidak memblokir respon ke pengirim
+                    sendEmail({
+                        email: receiver.email,
+                        subject: `Pesan Baru dari ${populatedMessage.senderId.name} - Campus Thrift Hub`,
+                        message: emailHtml
+                    }).catch(err => console.error("Gagal mengirim email notifikasi chat:", err));
+                }
             }
         }
 
@@ -127,29 +191,36 @@ exports.getConversations = async (req, res) => {
         const myId = req.user.id;
         const messages = await Message.find({
             $or: [{ senderId: myId }, { receiverId: myId }]
-        }).populate('senderId receiverId', 'name profilePicture isVerified isBanned'); // 👈 TAMBAHKAN isBanned DI SINI
+        }).populate('senderId receiverId', 'name profilePicture isVerified isBanned'); 
 
         const conversations = new Map();
 
         messages.forEach(msg => {
-            const otherUser = msg.senderId._id.toString() === myId.toString() ? msg.receiverId : msg.senderId;
+            // Tentukan siapa lawan bicara di percakapan ini
+            const isMeSender = msg.senderId._id.toString() === myId.toString();
+            const otherUser = isMeSender ? msg.receiverId : msg.senderId;
             const otherUserId = otherUser._id.toString();
+
+            // Pesan hanya dianggap "belum dibaca" JIKA penerimanya adalah SAYA, dan status pesannya false.
+            const isUnreadForMe = (msg.receiverId._id.toString() === myId.toString() && msg.isRead === false);
+            const isReadStatusForMe = !isUnreadForMe;
 
             if (!conversations.has(otherUserId)) {
                 conversations.set(otherUserId, {
                     user: otherUser,
                     lastMessage: msg.text,
-                    isRead: msg.isRead,
+                    isRead: isReadStatusForMe, 
                     senderId: msg.senderId._id,
                     updatedAt: msg.createdAt
                 });
             } else {
                 const existing = conversations.get(otherUserId);
+                // Hanya timpa jika pesan ini lebih baru dari yang sudah tersimpan di map
                 if (new Date(msg.createdAt) > new Date(existing.updatedAt)) {
                     conversations.set(otherUserId, {
                         user: otherUser,
                         lastMessage: msg.text,
-                        isRead: msg.isRead,
+                        isRead: isReadStatusForMe, 
                         senderId: msg.senderId._id,
                         updatedAt: msg.createdAt
                     });
