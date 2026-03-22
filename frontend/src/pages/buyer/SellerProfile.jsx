@@ -7,7 +7,7 @@ import {
     MapPin, School, Star, ShieldCheck, 
     Edit2, PackageSearch, PlusCircle, 
     MessageSquare, AlertTriangle, X, ImagePlus, 
-    Trash2, CheckCircle, Loader2, Tag, HelpCircle,
+    Trash2, CheckCircle, Loader2, HelpCircle,
     ChevronLeft, ChevronRight, Plus
 } from 'lucide-react';
 
@@ -24,7 +24,7 @@ export default function SellerProfile() {
     const [activeCategory, setActiveCategory] = useState('Semua');
 
     // ==========================================
-    // STATE KONFIRMASI MODAL (PENGGANTI WINDOW.CONFIRM)
+    // STATE KONFIRMASI MODAL
     // ==========================================
     const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDanger: false });
 
@@ -59,24 +59,36 @@ export default function SellerProfile() {
         const fetchProfile = async () => {
             try {
                 const response = await api.get(`/users/seller/${id}`);
-                setSeller(response.data.data.profile);
+                const profileData = response.data.data?.profile || response.data.data;
+
+                // ==========================================
+                // LOGIKA PENGALIHAN 404 (NOT FOUND / BANNED)
+                // ==========================================
+                if (!profileData || profileData.isBanned) {
+                    navigate('/404', { replace: true });
+                    return;
+                }
+
+                setSeller(profileData);
                 
-                if (user?.id === id || user?._id === id) {
+                if (isMyProfile) {
                     const prodRes = await api.get(`/products/seller/${id}`);
                     setProducts(prodRes.data.data);
                 } else {
-                    setProducts(response.data.data.products);
+                    setProducts(response.data.data.products || []);
                 }
                 
                 setReviews(response.data.data.reviews || []);
             } catch (error) {
+                // Jika backend merespons 404 atau terjadi error lain
                 console.error("Gagal memuat profil seller", error);
+                navigate('/404', { replace: true });
             } finally {
                 setLoading(false);
             }
         };
         fetchProfile();
-    }, [id, user]);
+    }, [id, user, isMyProfile, navigate]);
 
     // ==========================================
     // HANDLER LAPORAN
@@ -92,7 +104,6 @@ export default function SellerProfile() {
     const handleSubmitReport = async (e) => {
         e.preventDefault();
         if (!reportForm.title || !reportForm.description) return toast.error("Harap isi semua kolom!");
-        if (!reportForm.evidenceImage) return toast.error("Harap lampirkan bukti foto (Screenshot)!");
 
         setSubmittingReport(true);
         const toastId = toast.loading("Mengirim laporan ke Admin...");
@@ -101,7 +112,11 @@ export default function SellerProfile() {
         formData.append('reportedUserId', id); 
         formData.append('title', reportForm.title);
         formData.append('description', reportForm.description);
-        formData.append('evidenceImage', reportForm.evidenceImage);
+        
+        // Bukti gambar bersifat opsional, hanya dikirim jika ada
+        if (reportForm.evidenceImage) {
+            formData.append('evidenceImage', reportForm.evidenceImage);
+        }
 
         try {
             await api.post('/reports', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
@@ -171,7 +186,7 @@ export default function SellerProfile() {
             price: product.price,
             description: product.description,
             category: product.category?.name || product.category || '',
-            stock: product.stock === 0 ? 1 : product.stock, // Jika ngedit barang sold out, default kasih 1 stok
+            stock: product.stock === 0 ? 1 : product.stock, // Default kasih 1 stok jika ngedit barang sold out
             existingImages: existing,
             newPhotos: []
         });
@@ -179,7 +194,7 @@ export default function SellerProfile() {
         setIsEditModalOpen(true);
     };
 
-    // Menggabungkan preview gambar lama dan gambar baru yang belum disubmit
+    // Menggabungkan preview gambar lama dan gambar baru
     const allPreviews = [
         ...editForm.existingImages.map(url => ({ type: 'existing', url })),
         ...editForm.newPhotos.map((file, idx) => ({ type: 'new', url: URL.createObjectURL(file), fileIndex: idx }))
@@ -260,7 +275,8 @@ export default function SellerProfile() {
         </div>
     );
     
-    if (!seller) return <div className="text-center mt-20 font-black text-slate-400">Pengguna tidak ditemukan.</div>;
+    // Safety check tambahan
+    if (!seller) return null; 
 
     const availableCategories = ['Semua', ...new Set(products.map(p => p.category?.name || p.category || 'Uncategorized'))];
     const displayedProducts = activeCategory === 'Semua' 
@@ -303,11 +319,11 @@ export default function SellerProfile() {
                     />
                 </div>
                 
-                <div className="p-6 flex flex-col flex-1 z-20 bg-white" onClick={() => !isMyProfile && navigate(`/product/${product._id}`)}>
+                <div className="p-6 flex flex-col flex-1 z-20 bg-white cursor-pointer" onClick={() => !isMyProfile && navigate(`/product/${product._id}`)}>
                     <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md w-max mb-3 ${isSoldOut ? 'bg-slate-100 text-slate-400' : 'bg-[#FF9500]/10 text-[#FF9500]'}`}>
                         {product.category?.name || product.category || 'Uncategorized'}
                     </span>
-                    <h3 className={`font-black text-base line-clamp-2 mb-4 cursor-pointer ${isSoldOut ? 'text-slate-400' : 'text-slate-800 hover:text-[#00478F]'}`}>
+                    <h3 className={`font-black text-base line-clamp-2 mb-4 transition-colors ${isSoldOut ? 'text-slate-400' : 'text-slate-800 group-hover:text-[#00478F]'}`}>
                         {product.title}
                     </h3>
                     <div className="mt-auto flex flex-col pt-5 border-t border-slate-100">
@@ -320,7 +336,7 @@ export default function SellerProfile() {
                     {/* TOMBOL IKLANKAN LAGI (Republish) */}
                     {isMyProfile && isSoldOut && (
                         <button 
-                            onClick={(e) => { e.preventDefault(); openEditModal(product); }}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditModal(product); }}
                             className="mt-5 w-full py-3 bg-white text-[#00478F] border-2 border-[#00478F] flex justify-center items-center gap-2 font-black rounded-xl hover:bg-[#00478F] hover:text-white text-xs uppercase transition-colors"
                         >
                             <PlusCircle size={16} /> Iklankan Lagi

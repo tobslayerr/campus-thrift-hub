@@ -35,13 +35,24 @@ export default function ProductDetail() {
         const fetchData = async () => {
             try {
                 const productRes = await api.get(`/products/${id}`);
-                setProduct(productRes.data.data);
+                const productData = productRes.data.data;
+
+                // ==========================================
+                // LOGIKA PENGALIHAN 404 (NOT FOUND / BANNED)
+                // ==========================================
+                if (!productData || (productData.sellerId && productData.sellerId.isBanned)) {
+                    navigate('/404', { replace: true });
+                    return;
+                }
+
+                setProduct(productData);
 
                 const reviewRes = await api.get(`/reviews/product/${id}`);
                 setReviews(reviewRes.data.data); 
             } catch (error) {
-                toast.error("Gagal memuat data barang.");
-                navigate('/'); 
+                // Jika backend mengirim status 404 (Data tidak ada di DB) atau error lain
+                console.error(error);
+                navigate('/404', { replace: true });
             } finally {
                 setLoading(false);
             }
@@ -113,7 +124,8 @@ export default function ProductDetail() {
         </div>
     );
     
-    if (!product) return <div className="text-center mt-20 font-black text-slate-400">Barang tidak ditemukan.</div>;
+    // Safety check tambahan, jika tidak ada product maka render null (seharusnya sudah tertangkap redirect)
+    if (!product) return null; 
 
     const isMine = product.sellerId._id === myId;
     const hasReviewed = reviews.some(r => r.buyerId?._id === myId);
@@ -178,7 +190,7 @@ export default function ProductDetail() {
                         <div className="bg-white p-8 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
                                 <span className="bg-[#FF9500]/10 text-[#FF9500] px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-[#FF9500]/20">
-                                    {product.category}
+                                    {product.category?.name || product.category || 'Kategori'}
                                 </span>
                                 <div className="flex items-center gap-1 text-slate-500 text-xs font-black bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
                                     <Box size={14} className="text-[#00478F]" /> Stok: {product.stock || 0}
@@ -393,7 +405,7 @@ export default function ProductDetail() {
                     </div>
 
                     <div className="lg:col-span-5">
-                        <div className="bg-[#FF9500] p-8 rounded-[2.5rem] text-white relative overflow-hidden sticky top-24">
+                        <div className="bg-[#FF9500] p-8 rounded-[2.5rem] text-white overflow-hidden sticky top-24">
                             <h4 className="text-xl font-black mb-2 relative z-10">Keamanan Escrow</h4>
                             <p className="text-orange-100 text-sm font-medium relative z-10 mb-6">Uang Anda aman dan hanya akan cair ke penjual setelah Anda mengkonfirmasi barang diterima dengan baik.</p>
                             <ShieldCheck size={120} className="absolute -bottom-8 -right-8 text-white/20 rotate-12" />

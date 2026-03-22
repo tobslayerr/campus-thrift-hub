@@ -25,10 +25,13 @@ import Notifications from './pages/user/Notifications';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsAndConditions from './pages/TermsAndConditions';
 
-// ---> IMPORT HALAMAN LUPA PASSWORD (HURUF DISAMAKAN) <---
+// Autentikasi Tambahan
 import ForgotPassword from './pages/auth/ForgotPassword';
-import VerifyOTP from './pages/auth/VerifyOTP'; // <-- PERBAIKAN DI SINI
+import VerifyOTP from './pages/auth/VerifyOtp'; 
 import ResetPassword from './pages/auth/ResetPassword';
+
+// ---> IMPORT HALAMAN 404 <---
+import NotFound from './pages/NotFound';
 
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
@@ -51,6 +54,9 @@ function LayoutManager({ children }) {
         location.pathname === '/verify-otp' ||
         location.pathname === '/reset-password';
 
+    // Halaman 404 juga biasanya bersih dari footer
+    const isNotFound = location.pathname === '/404';
+
     if (isAdminDashboard) {
         return <main className="font-sans bg-slate-50 text-slate-900 min-h-screen">{children}</main>;
     }
@@ -59,7 +65,7 @@ function LayoutManager({ children }) {
         <div className={isAdminLogin ? "min-h-screen bg-slate-50 font-sans flex flex-col" : "min-h-screen bg-brand-light font-sans text-gray-900 flex flex-col"}>
             {!isBannedArea && (isAdminLogin ? <AdminNavbar /> : <Navbar />)}
             <main className="flex-grow">{children}</main>
-            {!isBannedArea && !isAdminLogin && !isAuthPage && <Footer />}
+            {!isBannedArea && !isAdminLogin && !isAuthPage && !isNotFound && <Footer />}
         </div>
     );
 }
@@ -80,9 +86,9 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             
-            {/* ---> ROUTE LUPA PASSWORD <--- */}
+            {/* ROUTE LUPA PASSWORD */}
             <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/verify-otp" element={<VerifyOTP />} /> {/* <-- PERBAIKAN DI SINI */}
+            <Route path="/verify-otp" element={<VerifyOTP />} /> 
             <Route path="/reset-password" element={<ResetPassword />} />
 
             <Route path="/product/:id" element={<ProductDetail />} />
@@ -108,6 +114,11 @@ function App() {
             {/* ADMIN ROUTES */}
             <Route path="/portal-auth-admin-x7y9z-2026" element={<AdminLogin />} />
             <Route path="/admin" element={<ProtectedRoute requireAdmin={true}><AdminDashboard /></ProtectedRoute>} />
+
+            {/* ---> ROUTE NOT FOUND & CATCH ALL <--- */}
+            <Route path="/404" element={<NotFound />} />
+            <Route path="*" element={<NotFound />} />
+
           </Routes>
         </LayoutManager>
     </Router>
