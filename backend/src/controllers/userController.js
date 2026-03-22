@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const Product = require('../models/Product');
 const Review = require('../models/Review');
-const Transaction = require('../models/Transaction'); // <--- PENTING UNTUK ANALITIK
+const Transaction = require('../models/Transaction'); 
 const { uploadToCloudinary } = require('../middlewares/upload');
 
 // @desc    Update Profil User (Termasuk Data Rekening & QRIS)
@@ -47,12 +47,26 @@ exports.updateProfile = async (req, res) => {
 
         await user.save();
 
-        const userData = user.toObject();
-        delete userData.password;
+        // 🌟 PERBAIKAN FATAL BUG STATE: 
+        // Mengemas object secara manual agar properti '_id' dipetakan menjadi 'id'.
+        // Ini memastikan Frontend tidak kehilangan properti 'user.id' setelah update profil.
+        const normalizedUserData = {
+            id: user._id, 
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            campus: user.campus,
+            domisili: user.domisili,
+            profilePicture: user.profilePicture,
+            bankName: user.bankName,
+            bankAccount: user.bankAccount,
+            bankAccountName: user.bankAccountName, 
+            qrisUrl: user.qrisUrl
+        };
 
         res.status(200).json({ 
             success: true, 
-            data: userData, 
+            data: normalizedUserData, 
             message: 'Profil dan metode pencairan dana berhasil diperbarui!' 
         });
 
@@ -208,7 +222,7 @@ exports.banUser = async (req, res) => {
 };
 
 // =================================================================
-// 📈 GET SELLER ANALYTICS (DIPERBAIKI)
+// 📈 GET SELLER ANALYTICS
 // =================================================================
 exports.getSellerAnalytics = async (req, res) => {
     try {
@@ -218,25 +232,21 @@ exports.getSellerAnalytics = async (req, res) => {
             return res.status(401).json({ success: false, message: 'User tidak terautentikasi.' });
         }
 
-        // 1. Hitung Pendapatan Bulan Ini
         const startOfMonth = new Date();
         startOfMonth.setDate(1);
         startOfMonth.setHours(0, 0, 0, 0);
 
-        // Menggunakan .lean() agar aman dari proxy Mongoose saat kalkulasi reduce
         const thisMonthTransactions = await Transaction.find({
             sellerId: sellerId,
             status: { $in: ['Selesai', 'Dana Dicairkan'] },
             updatedAt: { $gte: startOfMonth }
         }).lean();
 
-        // Safe reduce: pastikan selalu berupa Number
         const totalRevenueThisMonth = thisMonthTransactions.reduce((sum, trx) => {
             const amount = Number(trx.sellerIncome) || Number(trx.price) || 0;
             return sum + amount;
         }, 0);
 
-        // 2. Hitung Total Views & Produk Aktif/Terjual
         const products = await Product.find({ sellerId: sellerId }).lean();
         
         const totalViews = products.reduce((sum, p) => {
@@ -246,7 +256,6 @@ exports.getSellerAnalytics = async (req, res) => {
         const activeProducts = products.filter(p => p.status === 'Tersedia').length;
         const soldProducts = products.filter(p => p.status === 'Terjual' || p.status === 'Selesai').length;
 
-        // 3. Ambil 5 Produk Paling Banyak Dilihat
         const topViewedProducts = await Product.find({ sellerId: sellerId, status: { $ne: 'Dihapus' } })
             .sort({ views: -1 })
             .limit(5)

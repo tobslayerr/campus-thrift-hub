@@ -125,6 +125,7 @@ exports.loginUser = async (req, res) => {
                 profilePicture: user.profilePicture,
                 bankName: user.bankName,
                 bankAccount: user.bankAccount,
+                bankAccountName: user.bankAccountName, // 🌟 Pastikan ini ada
                 qrisUrl: user.qrisUrl
             },
             token
@@ -237,7 +238,25 @@ exports.resetPassword = async (req, res) => {
 exports.getMe = async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select('-password');
-        res.status(200).json({ success: true, data: user });
+        
+        // 🌟 PERBAIKAN FATAL: 
+        // Konstruksikan ulang object JSON agar memiliki properti 'id' (bukan hanya '_id') 
+        // dan sertakan 'bankAccountName' agar state tidak hilang.
+        const normalizedUser = {
+            id: user._id, 
+            name: user.name, 
+            email: user.email, 
+            role: user.role,
+            campus: user.campus,
+            domisili: user.domisili,
+            profilePicture: user.profilePicture,
+            bankName: user.bankName,
+            bankAccount: user.bankAccount,
+            bankAccountName: user.bankAccountName, // 🌟 Pastikan ini ada
+            qrisUrl: user.qrisUrl
+        };
+
+        res.status(200).json({ success: true, data: normalizedUser });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -248,7 +267,7 @@ exports.getMe = async (req, res) => {
 exports.updateProfile = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { name, campus, domisili, bankName, bankAccount } = req.body;
+        const { name, campus, domisili, bankName, bankAccount, bankAccountName } = req.body;
 
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
@@ -258,6 +277,7 @@ exports.updateProfile = async (req, res) => {
         user.domisili = domisili || user.domisili;
         user.bankName = bankName || user.bankName;
         user.bankAccount = bankAccount || user.bankAccount;
+        user.bankAccountName = bankAccountName || user.bankAccountName; // 🌟 Tangkap data atas nama
 
         if (req.files) {
             if (req.files.avatar) {
@@ -275,7 +295,7 @@ exports.updateProfile = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'Profil dan data rekening berhasil diperbarui!',
-            data: user
+            data: user // Ingat, ini dikembalikan tapi kita akan mengabaikannya atau merefresh state di frontend.
         });
     } catch (error) {
         console.error("Error Update Profile:", error);

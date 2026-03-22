@@ -6,7 +6,7 @@ import {
     ClipboardList, Clock, ShieldCheck, 
     Landmark, CheckCircle, MessageSquare, 
     AlertTriangle, Lock, KeyRound, ArrowRight, User,
-    Star, ImagePlus, X, RotateCcw, Package, MapPin, ExternalLink
+    Star, ImagePlus, X, RotateCcw, Package, MapPin, ExternalLink, Info
 } from 'lucide-react';
 
 export default function MyTransactions() {
@@ -81,16 +81,21 @@ export default function MyTransactions() {
         } catch (e) { toast.error(e.response?.data?.message || "Gagal memperbarui status", { id: tid }); }
     };
 
+    // 🌟 PERBAIKAN: Fungsi Pengiriman Ekspedisi (Menambahkan Validasi Cost/Ongkir) 🌟
     const handleShipItem = async (trxId) => {
         const data = shippingForm[trxId];
-        if (!data?.courier || !data?.resi) return toast.error("Nama Kurir dan Nomor Resi wajib diisi!");
+        if (!data?.courier || !data?.resi || !data?.cost) return toast.error("Kurir, Nomor Resi, dan Nominal Ongkir wajib diisi!");
         
-        const tid = toast.loading("Menyimpan resi...");
+        const tid = toast.loading("Menyimpan info pengiriman...");
         try {
-            await api.put(`/transactions/${trxId}/ship`, { shippingCourier: data.courier, shippingResi: data.resi });
+            await api.put(`/transactions/${trxId}/ship`, { 
+                shippingCourier: data.courier, 
+                shippingResi: data.resi,
+                shippingCost: Number(data.cost) // <--- Ongkir masuk ke backend
+            });
             toast.success("Barang ditandai terkirim!", { id: tid });
             fetchTransactions();
-        } catch (e) { toast.error(e.response?.data?.message || "Gagal update resi", { id: tid }); }
+        } catch (e) { toast.error(e.response?.data?.message || "Gagal update pengiriman", { id: tid }); }
     };
 
     const handleConfirmDelivery = async (trxId) => {
@@ -314,7 +319,10 @@ export default function MyTransactions() {
                                             {/* PENJUAL SAJA: TAMPILAN ALAMAT PEMBELI */}
                                             {activeTab === 'penjualan' && trx.buyerAddress && (
                                                 <div className="mt-4 mb-4 p-5 bg-blue-50 border border-blue-100 rounded-2xl">
-                                                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-3 flex items-center gap-2"><MapPin size={14}/> Tujuan Pengiriman Ekspedisi</p>
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-2"><MapPin size={14}/> Tujuan Pengiriman Ekspedisi</p>
+                                                        <span className="px-2 py-0.5 rounded-md border shadow-sm inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest bg-orange-100 text-orange-700 border-orange-200"><Info size={10} /> Ongkir DFOD</span>
+                                                    </div>
                                                     <div className="space-y-2">
                                                         <div><p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Alamat Lengkap</p><p className="text-sm font-bold text-slate-800 leading-relaxed">{trx.buyerAddress}</p></div>
                                                         <div className="grid grid-cols-2 gap-4 pt-2">
@@ -325,7 +333,7 @@ export default function MyTransactions() {
                                                 </div>
                                             )}
 
-                                            {/* PENJUAL SAJA: UPDATE STATUS PENGEMASAN & INPUT RESI */}
+                                            {/* PENJUAL SAJA: UPDATE STATUS PENGEMASAN & INPUT RESI + ONGKIR */}
                                             {activeTab === 'penjualan' && trx.status === 'Dana Ditahan (Siap COD)' && (
                                                 <div className="mt-6 p-6 bg-white border-2 border-blue-100 rounded-2xl shadow-sm">
                                                     {/* Update Status Pengemasan */}
@@ -338,34 +346,53 @@ export default function MyTransactions() {
                                                         </div>
                                                     </div>
 
-                                                    {/* Input Resi Final */}
-                                                    <p className="font-black text-blue-900 mb-1 text-lg">Input Resi Pengiriman Final</p>
-                                                    <p className="text-xs text-blue-700 mb-4 font-medium">Jika barang sudah diserahkan ke kurir, masukkan resi di bawah ini.</p>
-                                                    <div className="flex gap-3 flex-col sm:flex-row">
-                                                        <input type="text" placeholder="Kurir (Contoh: J&T / JNE)" value={shippingForm[trx._id]?.courier || ''} onChange={(e) => setShippingForm({...shippingForm, [trx._id]: { ...shippingForm[trx._id], courier: e.target.value }})} className="flex-1 px-4 py-3 border border-blue-200 rounded-xl font-bold focus:outline-blue-500" />
-                                                        <input type="text" placeholder="Nomor Resi" value={shippingForm[trx._id]?.resi || ''} onChange={(e) => setShippingForm({...shippingForm, [trx._id]: { ...shippingForm[trx._id], resi: e.target.value }})} className="flex-1 px-4 py-3 border border-blue-200 rounded-xl font-bold focus:outline-blue-500" />
-                                                        <button onClick={() => handleShipItem(trx._id)} className="bg-blue-600 text-white px-8 py-3 rounded-xl font-black hover:bg-blue-700 shadow-md">Kirim Resi</button>
+                                                    {/* 🌟 INPUT RESI FINAL BESERTA TAGIHAN ONGKIR 🌟 */}
+                                                    <p className="font-black text-blue-900 mb-1 text-lg">Input Resi & Tagihan Ongkos Kirim</p>
+                                                    <p className="text-xs text-blue-700 mb-4 font-medium leading-relaxed">Saat menyerahkan paket ke kurir, masukkan resi dan nominal ongkir yang tertera pada struk agar pembeli bisa menyiapkan uang pas.</p>
+                                                    <div className="flex gap-3 flex-col lg:flex-row">
+                                                        <input type="text" placeholder="Kurir (Contoh: J&T / JNE)" value={shippingForm[trx._id]?.courier || ''} onChange={(e) => setShippingForm({...shippingForm, [trx._id]: { ...shippingForm[trx._id], courier: e.target.value }})} className="flex-1 px-4 py-3 border border-blue-200 rounded-xl font-bold focus:outline-blue-500 text-sm" />
+                                                        <input type="text" placeholder="Nomor Resi" value={shippingForm[trx._id]?.resi || ''} onChange={(e) => setShippingForm({...shippingForm, [trx._id]: { ...shippingForm[trx._id], resi: e.target.value }})} className="flex-1 px-4 py-3 border border-blue-200 rounded-xl font-bold focus:outline-blue-500 text-sm" />
+                                                        <input type="number" placeholder="Nominal Ongkir (Rp)" value={shippingForm[trx._id]?.cost || ''} onChange={(e) => setShippingForm({...shippingForm, [trx._id]: { ...shippingForm[trx._id], cost: e.target.value }})} className="flex-1 px-4 py-3 border border-blue-200 rounded-xl font-bold focus:outline-blue-500 text-sm" />
+                                                        <button onClick={() => handleShipItem(trx._id)} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black hover:bg-blue-700 shadow-md whitespace-nowrap text-sm shrink-0">Kirim Paket</button>
                                                     </div>
                                                 </div>
                                             )}
 
-                                            {/* PEMBELI & PENJUAL: TAMPILAN RESI */}
+                                            {/* PEMBELI & PENJUAL: TAMPILAN RESI BESERTA ONGKIR */}
                                             {trx.status === 'Barang Dikirim' && (
-                                                <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4">
-                                                    <div className="text-center md:text-left w-full md:w-auto">
-                                                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-1 flex items-center justify-center md:justify-start gap-1"><Package size={14}/> Status Ekspedisi</p>
+                                                <div className="mt-6 p-6 bg-blue-50 border border-blue-200 rounded-2xl flex flex-col md:flex-row justify-between items-start gap-4">
+                                                    <div className="w-full md:w-auto">
+                                                        <div className="flex items-center justify-start gap-2 mb-3">
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-1"><Package size={14}/> Status Ekspedisi</p>
+                                                            <span className="px-2 py-0.5 rounded-md border shadow-sm inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest bg-orange-100 text-orange-700 border-orange-200"><Info size={10} /> Bayar Tujuan</span>
+                                                        </div>
                                                         <p className="font-black text-slate-800 text-sm">Kurir: {trx.shippingCourier}</p>
-                                                        <div className="flex flex-col sm:flex-row items-center gap-3 mt-2">
+                                                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-2">
                                                             <p className="font-mono text-blue-900 text-xl font-bold tracking-widest bg-white px-3 py-1 rounded-md border border-blue-100 inline-block">{trx.shippingResi}</p>
-                                                            <a href={`https://www.google.com/search?q=cek+resi+${trx.shippingCourier}+${trx.shippingResi}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-white border border-blue-200 text-blue-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all shadow-sm">
-                                                                <ExternalLink size={14} /> Lacak Resi via Google
+                                                            <a href={`https://www.google.com/search?q=cek+resi+${trx.shippingCourier}+${trx.shippingResi}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-white border border-blue-200 text-blue-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all shadow-sm shrink-0">
+                                                                <ExternalLink size={14} /> Lacak Resi (Google)
                                                             </a>
                                                         </div>
+
+                                                        {/* 🌟 HINT TAGIHAN ONGKIR UNTUK PEMBELI 🌟 */}
+                                                        {trx.shippingCost > 0 && (
+                                                            <div className="mt-5 bg-orange-100/50 border border-orange-200 p-4 rounded-xl max-w-sm">
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-orange-600 mb-1 flex items-center gap-1"><AlertTriangle size={12}/> Tagihan Ongkos Kirim</p>
+                                                                <div className="flex items-baseline gap-2">
+                                                                    <span className="font-black text-orange-700 text-2xl">Rp{trx.shippingCost.toLocaleString('id-ID')}</span>
+                                                                </div>
+                                                                {activeTab === 'pembelian' ? (
+                                                                    <p className="text-xs font-bold text-orange-600 mt-2 leading-relaxed">⚠️ Siapkan uang tunai (pas) untuk diserahkan ke kurir ekspedisi saat paket sampai di lokasi Anda.</p>
+                                                                ) : (
+                                                                    <p className="text-xs font-bold text-orange-600 mt-2 leading-relaxed">Informasi ongkir telah disampaikan ke pembeli.</p>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     
                                                     {/* PEMBELI SAJA YG BISA KONFIRMASI */}
                                                     {activeTab === 'pembelian' && (
-                                                        <button onClick={() => handleConfirmDelivery(trx._id)} className="w-full md:w-auto bg-green-500 text-white font-black px-6 py-4 rounded-xl hover:bg-green-600 shadow-lg hover:-translate-y-0.5 transition-all text-xs uppercase tracking-widest">
+                                                        <button onClick={() => handleConfirmDelivery(trx._id)} className="w-full md:w-auto bg-green-500 text-white font-black px-6 py-4 rounded-xl hover:bg-green-600 shadow-lg hover:-translate-y-0.5 transition-all text-xs uppercase tracking-widest md:mt-8">
                                                             Konfirmasi Terima Barang
                                                         </button>
                                                     )}

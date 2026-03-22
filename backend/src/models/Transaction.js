@@ -33,7 +33,10 @@ const transactionSchema = new mongoose.Schema({
     paymentMethod: { type: String },
     
     cancelTitle: { type: String },
-    cancelReason: { type: String }
+    cancelReason: { type: String },
+    shippingCourier: { type: String },
+    shippingResi: { type: String },
+    shippingCost: { type: Number, default: 0 }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Transaction', transactionSchema);

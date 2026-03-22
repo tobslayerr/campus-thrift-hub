@@ -13,7 +13,7 @@ exports.checkout = async (req, res) => {
             buyerAddress, 
             buyerPhone, 
             buyerLocationPoint, 
-            codMeetingPoint // <--- PENAMBAHAN FIELD TITIK TEMU COD
+            codMeetingPoint 
         } = req.body;
         const buyerId = req.user.id;
 
@@ -68,16 +68,17 @@ exports.checkout = async (req, res) => {
             buyerAddress,         
             buyerPhone,           
             buyerLocationPoint,
-            codMeetingPoint // <--- SIMPAN TITIK TEMU KE DATABASE
+            codMeetingPoint 
         });
 
         product.stock -= 1;
         product.status = product.stock === 0 ? 'Menunggu Pembayaran' : 'Tersedia';
         await product.save();
 
+        // 🌟 PERBAIKAN NOTIFIKASI EDUKASI DFOD 🌟
         if (deliveryMethod === 'Pengiriman') {
-            await Notification.create({ userId: buyerId, title: 'Pesanan Dibuat! 🛒', message: `Checkout "${product.title}" via Ekspedisi berhasil. Menunggu verifikasi pembayaran oleh Admin.`, type: 'TRANSACTION' });
-            await Notification.create({ userId: product.sellerId, title: 'Pesanan Baru Masuk! 📦', message: `Barang Anda "${product.title}" telah dipesan via Ekspedisi. Menunggu admin memverifikasi pembayaran.`, type: 'TRANSACTION' });
+            await Notification.create({ userId: buyerId, title: 'Pesanan Dibuat! 🛒', message: `Checkout "${product.title}" berhasil. Sistem Ongkir adalah DFOD (Ongkos kirim dibayar tunai ke kurir saat paket sampai). Menunggu verifikasi admin.`, type: 'TRANSACTION' });
+            await Notification.create({ userId: product.sellerId, title: 'Pesanan Baru Masuk! 📦', message: `Barang Anda "${product.title}" telah dipesan via Ekspedisi. Harap bersiap mengirim paket dengan layanan DFOD (Ongkir Bayar Tujuan). Menunggu admin verifikasi uang.`, type: 'TRANSACTION' });
         } else {
             await Notification.create({ userId: buyerId, title: 'Pesanan Dibuat! 🛒', message: `Checkout "${product.title}" via COD di ${codMeetingPoint} berhasil. Menunggu verifikasi pembayaran oleh Admin.`, type: 'TRANSACTION' });
             await Notification.create({ userId: product.sellerId, title: 'Pesanan Baru Masuk! 🤝', message: `Barang Anda "${product.title}" telah dipesan via COD. Titik temu di: ${codMeetingPoint}. Menunggu admin memverifikasi pembayaran.`, type: 'TRANSACTION' });
@@ -108,9 +109,10 @@ exports.updateStatus = async (req, res) => {
             if (transaction.productId) await Product.findByIdAndUpdate(transaction.productId._id, { status: 'Dana Ditahan (Siap COD)' });
             
             if (oldStatus !== 'Dana Ditahan (Siap COD)') {
+                // 🌟 PERBAIKAN PENGINGAT DFOD SAAT STATUS "SIAP KIRIM" 🌟
                 if (transaction.deliveryMethod === 'Pengiriman') {
-                    await Notification.create({ userId: transaction.buyerId, title: 'Pembayaran Diverifikasi 💸', message: `Pembayaran untuk "${productTitle}" telah diverifikasi Admin. Penjual akan segera memproses pengiriman barang Anda.`, type: 'TRANSACTION' });
-                    await Notification.create({ userId: transaction.sellerId, title: 'Pesanan Siap Dikirim! 🚚', message: `Uang pembelian "${productTitle}" sudah diamankan sistem. Silakan segera kemas barang, kirim, dan input resi di Dashboard!`, type: 'TRANSACTION' });
+                    await Notification.create({ userId: transaction.buyerId, title: 'Pembayaran Diverifikasi 💸', message: `Pembayaran "${productTitle}" diverifikasi Admin. Penjual akan segera memproses pengiriman. Siapkan uang tunai untuk bayar Ongkos Kirim (DFOD) ke kurir nanti.`, type: 'TRANSACTION' });
+                    await Notification.create({ userId: transaction.sellerId, title: 'Pesanan Siap Dikirim! 🚚', message: `Uang pembelian "${productTitle}" sudah diamankan sistem. Silakan bawa barang ke ekspedisi, MINTA LAYANAN DFOD (Ongkir bayar tujuan), lalu input resi di Dashboard!`, type: 'TRANSACTION' });
                 } else {
                     const meetingInfo = transaction.codMeetingPoint ? ` di ${transaction.codMeetingPoint}` : '';
                     await Notification.create({ userId: transaction.buyerId, title: 'Pembayaran Diverifikasi 💸', message: `Pembayaran Anda untuk "${productTitle}" telah diverifikasi Admin. Silakan janjian COD dengan penjual${meetingInfo}!`, type: 'TRANSACTION' });
@@ -128,7 +130,7 @@ exports.updateStatus = async (req, res) => {
 
 exports.shipItem = async (req, res) => {
     try {
-        const { shippingCourier, shippingResi } = req.body;
+        const { shippingCourier, shippingResi, shippingCost } = req.body;
         const transaction = await Transaction.findById(req.params.id).populate('productId');
         
         if (!transaction) return res.status(404).json({ message: 'Transaksi tidak ditemukan' });
@@ -137,7 +139,7 @@ exports.shipItem = async (req, res) => {
 
         transaction.shippingCourier = shippingCourier;
         transaction.shippingResi = shippingResi;
-        transaction.shippingProgress = 'Barang dalam perjalanan';
+        transaction.shippingCost = shippingCost || 0; // <--- SIMPAN shippingCost KE DATABASE
         transaction.status = 'Barang Dikirim';
         await transaction.save();
 
