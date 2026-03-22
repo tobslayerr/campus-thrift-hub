@@ -1,49 +1,71 @@
-require('dotenv').config();
 const express = require('express');
+const dotenv = require('dotenv');
 const cors = require('cors');
+const http = require('http'); // Tambahkan http
+const { Server } = require('socket.io'); // Tambahkan socket.io
 const connectDB = require('./src/config/db');
 
-// Import Routes
-const authRoutes = require('./src/routes/authRoutes');
-const productRoutes = require('./src/routes/productRoutes');
-const transactionRoutes = require('./src/routes/transactionRoutes');
-const userRoutes = require('./src/routes/userRoutes');
-const messageRoutes = require('./src/routes/messageRoutes');
-const reviewRoutes = require('./src/routes/reviewRoutes');
-const paymentMethodRoutes = require('./src/routes/paymentMethodRoutes');
-const reportRoutes = require('./src/routes/reportRoutes'); // 👈 TAMBAHAN BARU
-const notificationRoutes = require('./src/routes/notificationRoutes');
-
-// Inisialisasi Express
-const app = express();
-
-// Middleware dasar
-app.use(cors());
-app.use(express.json()); // Agar bisa membaca body format JSON
-app.use(express.urlencoded({ extended: true })); // Agar bisa membaca format Form Data (untuk upload file)
-
-// Connect ke MongoDB
+dotenv.config();
 connectDB();
 
-// Mounting Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/transactions', transactionRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/reviews', reviewRoutes);
-app.use('/api/payment-methods', paymentMethodRoutes);
-app.use('/api/reports', reportRoutes); // 👈 TAMBAHAN BARU
-app.use('/api/categories', require('./src/routes/categoryRoutes'));
-app.use('/api/notifications', notificationRoutes);
+const app = express();
 
-// Route Default / Home
-app.get('/', (req, res) => {
-    res.send('API Campus Thrift Hub Berjalan Lancar! 🚀');
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Setup HTTP Server & Socket.io
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*", // Sesuaikan dengan domain frontend Anda saat production
+        methods: ["GET", "POST"]
+    }
 });
 
-// Jalankan Server
+// Jadikan io dan users Map bisa diakses dari controller
+const userSockets = new Map(); // Menyimpan { userId: socketId }
+app.set('io', io);
+app.set('userSockets', userSockets);
+
+io.on('connection', (socket) => {
+    console.log('User connected to socket:', socket.id);
+
+    // Menerima event saat user login/membuka aplikasi
+    socket.on('register_user', (userId) => {
+        if (userId) {
+            userSockets.set(userId, socket.id);
+            console.log(`User ${userId} registered with socket ${socket.id}`);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+        // Hapus dari map saat disconnect
+        for (let [userId, socketId] of userSockets.entries()) {
+            if (socketId === socket.id) {
+                userSockets.delete(userId);
+                break;
+            }
+        }
+    });
+});
+
+// Rute
+app.use('/api/auth', require('./src/routes/authRoutes'));
+app.use('/api/users', require('./src/routes/userRoutes'));
+app.use('/api/categories', require('./src/routes/categoryRoutes'));
+app.use('/api/products', require('./src/routes/productRoutes'));
+app.use('/api/messages', require('./src/routes/messageRoutes'));
+app.use('/api/transactions', require('./src/routes/transactionRoutes'));
+app.use('/api/reviews', require('./src/routes/reviewRoutes'));
+app.use('/api/reports', require('./src/routes/reportRoutes'));
+app.use('/api/payment-methods', require('./src/routes/paymentMethodRoutes'));
+app.use('/api/notifications', require('./src/routes/notificationRoutes'));
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`✅ Server berjalan di mode ${process.env.NODE_ENV} pada port ${PORT}`);
+
+// Ganti app.listen menjadi server.listen
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });

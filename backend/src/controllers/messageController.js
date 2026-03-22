@@ -1,76 +1,69 @@
 const Message = require('../models/Message');
 const Notification = require('../models/Notification'); // 🔔 IMPORT NOTIFIKASI
 const User = require('../models/User'); // Untuk mengambil nama pengirim
+const mongoose = require('mongoose');
 
 // In-memory cache ringan untuk melacak siapa yang sedang mengetik
 const typingCache = new Map(); 
 
-// @desc    Kirim Pesan Baru
 exports.sendMessage = async (req, res) => {
     try {
-        const { receiverId, productId, text } = req.body;
+        const { receiverId, message, productId, text } = req.body;
         const senderId = req.user.id;
 
-        if (!text) return res.status(400).json({ message: 'Pesan tidak boleh kosong' });
+        // Ambil isi pesan dari 'text' (prioritas) atau 'message' dari body
+        const content = text || message;
 
-        const t = text.toLowerCase();
-        const phoneRegex = /(?:\+\s*62|62|0)[\s\-.]*8[0-9]{1,2}[\s\-.]?[0-9]{3,4}[\s\-.]?[0-9]{3,4}/g;
-        const forbiddenPatterns = [
-            /\b(pindah|lanjut|lewat|chat|hubungi)\s*(aja\s*)?(ke|di|via)?\s*(wa|whatsapp|w a|ig|instagram|tele|telegram|line)\b/i,
-            /\b(ini|ni|nih|nomor|no)\s*(wa|whatsapp|w a|watsap)\b/i,
-            /\b(wa|whatsapp|w a|w\.a|watsap|wea)\b/i,
-            /\b(rek|rekening|norek|bca|bni|bri|mandiri|bsi|cimb|danamon|permata|mega|bjb|gopay|gpay|dana|ovo|shopeepay|spay|linkaja)\b.{0,30}?\d{5,}/i,
-            /\b(transfer|tf)\s+(langsung|sekarang|aja|ke|rek|rekening|bank)\b/i,
-            /\b(minta|bagi|kirim)\s+(rek|rekening|norek)\b/i,
-            /\b(via|tf|transfer|pake|pakai|ke|bayar|topup|top\s?up)\s+(dana|ovo|gopay|gpay|shopeepay|spay|linkaja)\b/i,
-            /\b(shopee|tokopedia|lazada|bukalapak|tiktok)\b/i
-        ];
-
-        const isFraud = phoneRegex.test(t) || forbiddenPatterns.some(pattern => pattern.test(t));
-
-        if (isFraud) {
-            return res.status(403).json({
-                success: false,
-                message: "Teks diblokir! Dilarang menyertakan nomor WA atau Rekening."
-            });
+        // 1. Validasi Input Dasar
+        if (!receiverId || !content) {
+            return res.status(400).json({ message: 'Penerima dan isi pesan wajib diisi' });
         }
 
-        const newMessage = await Message.create({
+        // 2. Validasi format ID
+        if (!mongoose.Types.ObjectId.isValid(receiverId)) {
+            return res.status(400).json({ message: 'Format ID Penerima tidak valid' });
+        }
+
+        // 3. Siapkan data pesan sesuai Model (menggunakan field 'text')
+        const messageData = {
             senderId,
             receiverId,
-            productId: productId || null,
-            text: text
-        });
-
-        // Hapus status typing saat pesan terkirim
-        typingCache.delete(senderId.toString());
-
-        // ========================================================
-        // 🔔 LOGIKA NOTIFIKASI PESAN BARU
-        // ========================================================
-        // Cek apakah pengirim ini sudah mengirim pesan yang belum dibaca sebelumnya
-        // Jika sudah ada pesan belum dibaca dari pengirim ini, JANGAN kirim notif lagi (menghindari spam)
-        const unreadMsgCount = await Message.countDocuments({
-            senderId: senderId,
-            receiverId: receiverId,
+            text: content.trim(), // <--- DISESUAIKAN DENGAN MODEL (text)
             isRead: false
-        });
+        };
 
-        if (unreadMsgCount === 1) { // Hanya kirim notif saat pesan pertama yang belum dibaca masuk
-            const sender = await User.findById(senderId).select('name');
-            const senderName = sender ? sender.name.split(' ')[0] : 'Seseorang';
-            
-            await Notification.create({
-                userId: receiverId,
-                title: `Pesan Baru dari ${senderName} 💬`,
-                message: text.length > 40 ? text.substring(0, 40) + '...' : text,
-                type: 'SYSTEM'
-            });
+        if (productId && mongoose.Types.ObjectId.isValid(productId)) {
+            messageData.productId = productId;
         }
 
-        res.status(201).json({ success: true, data: newMessage });
+        // 4. Simpan ke Database
+        const newMessage = await Message.create(messageData);
+
+        // 5. Ambil data lengkap untuk Socket & Response
+        const populatedMessage = await Message.findById(newMessage._id)
+            .populate('senderId', 'name profilePicture isVerified campus')
+            .populate('productId', 'title imageUrl price');
+
+        // 6. Logika Socket.io (Realtime)
+        const io = req.app.get('io');
+        const userSockets = req.app.get('userSockets');
+
+        if (io && userSockets) {
+            const receiverSocketId = userSockets.get(receiverId);
+            if (receiverSocketId) {
+                io.to(receiverSocketId).emit('receive_message', populatedMessage);
+            }
+        }
+
+        res.status(201).json({ success: true, data: populatedMessage });
+
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        console.error("ERROR SEND_MESSAGE:", error); 
+        res.status(500).json({ 
+            success: false, 
+            message: 'Terjadi kesalahan internal server saat mengirim pesan',
+            error: error.message 
+        });
     }
 };
 
