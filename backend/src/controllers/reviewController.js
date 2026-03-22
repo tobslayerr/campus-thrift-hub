@@ -1,7 +1,10 @@
 const Review = require('../models/Review');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
+const Product = require('../models/Product'); // 📦 IMPORT PRODUCT (Untuk ambil judul barang)
+const Notification = require('../models/Notification'); // 🔔 IMPORT NOTIFIKASI
 const { uploadToCloudinary } = require('../middlewares/upload');
+const sendEmail = require('../utils/sendEmail'); // 📧 IMPORT SEND EMAIL
 
 exports.createReview = async (req, res) => {
     try {
@@ -49,6 +52,51 @@ exports.createReview = async (req, res) => {
             });
         }
 
+        // ====================================================================
+        // 🌟 6. LOGIKA NOTIFIKASI IN-APP & EMAIL KE PENJUAL 🌟
+        // ====================================================================
+        const seller = await User.findById(sellerId);
+        const buyer = await User.findById(buyerId);
+        const product = await Product.findById(productId);
+        const productTitle = product ? product.title : 'Barang';
+
+        if (seller) {
+            // A. Kirim Notifikasi Tab / In-App
+            await Notification.create({
+                userId: sellerId,
+                title: 'Ulasan Baru Diterima! ⭐',
+                message: `${buyer.name} memberikan ${rating} Bintang untuk pesanan "${productTitle}".`,
+                type: 'SYSTEM'
+            });
+
+            // B. Kirim Email Pemberitahuan
+            if (seller.email) {
+                const starsHtml = '⭐'.repeat(Number(rating)); // Generate bintang sesuai rating
+                const emailHtml = `
+                    <div style="font-family: sans-serif; border: 1px solid #e2e8f0; padding: 30px; border-radius: 16px; max-w: 600px; margin: 0 auto;">
+                        <h2 style="color: #FF9500; margin-top: 0;">Anda Mendapat Ulasan Baru! 🎉</h2>
+                        <p style="color: #334155; font-size: 16px;">Halo <strong>${seller.name}</strong>,</p>
+                        <p style="color: #334155; font-size: 16px;">Selamat! Pembeli <strong>${buyer.name}</strong> baru saja memberikan ulasan untuk produk jualan Anda: <strong>"${productTitle}"</strong>.</p>
+                        
+                        <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin: 24px 0; border: 1px solid #e2e8f0; color: #475569;">
+                            <p style="margin: 0 0 10px 0; font-size: 18px;"><strong>Penilaian:</strong> <span style="color: #FF9500;">${starsHtml}</span> (${rating}/5)</p>
+                            <p style="margin: 0; font-style: italic;">"${comment || 'Tidak ada komentar tertulis.'}"</p>
+                        </div>
+                        
+                        <p style="color: #334155; font-size: 14px;">Pertahankan terus performa dan kualitas pelayanan toko Anda agar makin banyak pembeli yang tertarik!</p>
+                        <p style="color: #94a3b8; font-size: 12px; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 16px;">Sistem Notifikasi Otomatis - Campus Thrift Hub.</p>
+                    </div>
+                `;
+
+                // Kirim email secara asinkron agar tidak membuat loading lambat bagi pembeli saat memberi ulasan
+                sendEmail({
+                    email: seller.email,
+                    subject: `Ulasan Baru: ${rating} Bintang dari ${buyer.name} ⭐`,
+                    message: emailHtml
+                }).catch(err => console.error("Gagal kirim email ulasan baru:", err));
+            }
+        }
+
         // Return data yang dipopulate agar Frontend bisa langsung menampilkan UI ulasannya
         const populatedReview = await Review.findById(review._id).populate('buyerId', 'name profilePicture');
 
@@ -70,8 +118,6 @@ exports.getProductReviews = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
-
-// --- TAMBAHAN BARU ---
 
 // Ambil semua ulasan milik seorang Penjual (untuk halaman Profil Penjual)
 exports.getSellerReviews = async (req, res) => {
