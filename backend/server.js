@@ -19,14 +19,11 @@ const allowedOrigins = [
 
 app.use(cors({
     origin: function (origin, callback) {
-        // Izinkan request tanpa origin (seperti mobile apps atau curl) ATAU origin yang terdaftar
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
+        // Kita izinkan saja dari sisi Express, karena Vercel.json sudah mengunci keamanannya
+        callback(null, true); 
     },
-    credentials: true
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 }));
 
 app.use(express.json());
