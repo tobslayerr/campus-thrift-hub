@@ -44,54 +44,70 @@ exports.createProduct = async (req, res) => {
 
 exports.getProducts = async (req, res) => {
     try {
-        const { category, search, campus, minRating, page = 1, limit = 12 } = req.query;
+        const { search, category, minPrice, maxPrice, status, sort, campus, limit } = req.query;
+        let query = {};
 
-        let query = { status: 'Tersedia', stock: { $gt: 0 } };
-        
-        // Filter Kategori
-        if (category && category !== 'Semua') query.category = category;
-        
-        // Filter Search Keyword
-        if (search) {
-            query.$or = [
-                { title: { $regex: search, $options: 'i' } },
-                { description: { $regex: search, $options: 'i' } }
-            ];
+        // Filter Status (Default: Tersedia)
+        if (status) {
+            query.status = status;
+        } else {
+            query.status = 'Tersedia'; // Hanya tampilkan yang tersedia di katalog publik
         }
 
-        // Filter Kampus & Rating Toko (Harus mencari User/Seller terlebih dahulu)
-        if (campus || minRating) {
-            let sellerQuery = { isBanned: false };
-            if (campus && campus !== 'Semua Kampus') {
-                sellerQuery.campus = { $regex: campus, $options: 'i' };
-            }
-            if (minRating) {
-                sellerQuery.rating = { $gte: Number(minRating) };
-            }
+        // Filter Pencarian Judul
+        if (search) {
+            query.title = { $regex: search, $options: 'i' };
+        }
+
+        // Filter Kategori
+        if (category) {
+            query.category = category;
+        }
+
+        // Filter Harga
+        if (minPrice || maxPrice) {
+            query.price = {};
+            if (minPrice) query.price.$gte = Number(minPrice);
+            if (maxPrice) query.price.$lte = Number(maxPrice);
+        }
+
+        // ==========================================
+        // FITUR BARU: FILTER EKSKLUSIF KAMPUS
+        // ==========================================
+        if (campus) {
+            // Cari semua user (penjual) yang kampusnya sesuai dengan query
+            const sellersInCampus = await User.find({ 
+                campus: { $regex: new RegExp(`^${campus}$`, 'i') } 
+            }).select('_id');
             
-            const sellers = await User.find(sellerQuery).select('_id');
-            const sellerIds = sellers.map(s => s._id);
+            const sellerIds = sellersInCampus.map(seller => seller._id);
+            
+            // Masukkan ke dalam query produk
             query.sellerId = { $in: sellerIds };
         }
 
-        // Pagination Logic
-        const skip = (Number(page) - 1) * Number(limit);
+        // Pengaturan Sorting
+        let sortOption = { createdAt: -1 }; // Default: Terbaru
+        if (sort === 'lowest') sortOption = { price: 1 };
+        if (sort === 'highest') sortOption = { price: -1 };
+        if (sort === 'popular') sortOption = { views: -1 };
 
-        const products = await Product.find(query)
-            .populate('sellerId', 'name campus profilePicture isVerified isBanned rating')
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(Number(limit));
+        let dbQuery = Product.find(query)
+            .populate('sellerId', 'name profilePicture campus isVerified')
+            .populate('category', 'name')
+            .sort(sortOption);
             
-        const total = await Product.countDocuments(query);
+        // Limit jika diminta (berguna untuk Home)
+        if (limit) {
+            dbQuery = dbQuery.limit(Number(limit));
+        }
 
-        res.status(200).json({ 
-            success: true, 
+        const products = await dbQuery;
+
+        res.status(200).json({
+            success: true,
             count: products.length,
-            total,
-            totalPages: Math.ceil(total / limit),
-            currentPage: Number(page),
-            data: products 
+            data: products
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

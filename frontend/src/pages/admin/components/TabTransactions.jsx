@@ -1,4 +1,5 @@
-import { ShieldCheck, ImageIcon, Package, MapPin, Eye, User, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { ShieldCheck, ImageIcon, Package, MapPin, Eye, User, Search } from 'lucide-react';
 import Pagination from './Pagination';
 
 export default function TabTransactions({ 
@@ -11,16 +12,59 @@ export default function TabTransactions({
     handleVerifyPayment, 
     handleDisburseFunds 
 }) {
-    const displayedTransactions = (statusFilter === 'Semua' ? transactions : transactions.filter(t => t.status === statusFilter)).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    // State Filter Lokal untuk Kampus Penjual
+    const [campusFilterText, setCampusFilterText] = useState('');
+
+    // Pertama, filter berdasarkan Status (Kecuali tab Refund)
+    const statusFiltered = statusFilter === 'Semua' 
+        ? transactions.filter(t => !['Refund Diajukan', 'Refund Diproses', 'Refund Selesai', 'Dibatalkan'].includes(t.status))
+        : transactions.filter(t => t.status === statusFilter);
+
+    // Kedua, filter berdasarkan text input Kampus Penjual
+    const finalFiltered = campusFilterText.trim() === ''
+        ? statusFiltered
+        : statusFiltered.filter(t => {
+            const campusName = t.sellerId?.campus || '';
+            return campusName.toLowerCase().includes(campusFilterText.toLowerCase());
+        });
+
+    const displayedTransactions = finalFiltered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
     
     const filterOptions = ['Semua', 'Menunggu Verifikasi', 'Dana Ditahan (Siap COD)', 'Barang Dikirim', 'Selesai', 'Dana Dicairkan'];
 
+    // Helper function untuk extract nama dan kampus dengan aman
+    const getUserInfo = (userObj, defaultName = 'User Hapus') => {
+        if (!userObj) return { name: defaultName, campus: '?' };
+        // Jika data belum ter-populate (hanya berupa string ID)
+        if (typeof userObj === 'string') return { name: 'ID: ' + userObj.substring(0,6) + '...', campus: '?' };
+        
+        return {
+            name: userObj.name || defaultName,
+            campus: userObj.campus || '?'
+        };
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex flex-wrap gap-2 mb-6">
-                {filterOptions.map(status => (
-                    <button key={status} onClick={() => {setStatusFilter(status); setCurrentPage(1);}} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === status ? 'bg-[#00478F] text-white shadow-md' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}>{status}</button>
-                ))}
+            
+            {/* Header Filter (Status & Pencarian Kampus) */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <div className="flex flex-wrap gap-2">
+                    {filterOptions.map(status => (
+                        <button key={status} onClick={() => {setStatusFilter(status); setCurrentPage(1);}} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === status ? 'bg-[#00478F] text-white shadow-md' : 'bg-white text-slate-400 border border-slate-200 hover:bg-slate-50'}`}>{status}</button>
+                    ))}
+                </div>
+                
+                <div className="bg-white p-2 rounded-xl border border-slate-200 flex items-center w-full md:w-64 shadow-sm">
+                    <Search size={16} className="text-slate-400 ml-2 mr-2" />
+                    <input 
+                        type="text" 
+                        placeholder="Filter Kampus Penjual..." 
+                        value={campusFilterText}
+                        onChange={(e) => { setCampusFilterText(e.target.value); setCurrentPage(1); }}
+                        className="flex-1 bg-transparent border-none outline-none text-xs font-bold text-slate-700"
+                    />
+                </div>
             </div>
             
             {displayedTransactions.length === 0 ? (
@@ -30,7 +74,10 @@ export default function TabTransactions({
                     <div className="grid gap-6">
                         {displayedTransactions.map((trx) => {
                             const isQRISMethod = trx.paymentMethod?.toLowerCase().includes('qris');
-                            if (['Refund Diajukan', 'Refund Diproses', 'Refund Selesai', 'Dibatalkan'].includes(trx.status)) return null;
+                            
+                            // Ekstrak info user dengan aman
+                            const buyerInfo = getUserInfo(trx.buyerId, 'Pembeli');
+                            const sellerInfo = getUserInfo(trx.sellerId, 'Penjual');
 
                             return (
                                 <div key={trx._id} className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.02)] flex flex-col lg:flex-row lg:items-start justify-between gap-8 hover:border-[#00478F]/30 transition-all group">
@@ -49,9 +96,22 @@ export default function TabTransactions({
                                                 <div className="flex justify-between items-center"><span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">Transfer ke Penjual:</span><span className="font-black text-[#00478F] text-lg">Rp{(trx.sellerIncome || trx.price).toLocaleString('id-ID')}</span></div>
                                             </div>
 
+                                            {/* PERBAIKAN TAMPILAN NAMA DAN KAMPUS */}
                                             <div className="mt-2 space-y-2">
-                                                <p className="text-xs flex items-center gap-2"><span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> <span className="font-bold text-slate-400 w-16">Pembeli</span> <span className="font-black text-slate-700">: {trx.buyerId?.name || 'User'}</span></p>
-                                                <p className="text-xs flex items-center gap-2"><span className="w-1.5 h-1.5 bg-orange-500 rounded-full"></span> <span className="font-bold text-slate-400 w-16">Penjual</span> <span className="font-black text-slate-700">: {trx.sellerId?.name || 'User'}</span></p>
+                                                <p className="text-xs flex items-center gap-2">
+                                                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span> 
+                                                    <span className="font-bold text-slate-400 w-16">Pembeli</span> 
+                                                    <span className="font-black text-slate-700 truncate">: {buyerInfo.name} 
+                                                        <span className="font-medium text-[10px] text-slate-400 ml-1">({buyerInfo.campus})</span>
+                                                    </span>
+                                                </p>
+                                                <p className="text-xs flex items-center gap-2">
+                                                    <span className="w-1.5 h-1.5 bg-orange-500 rounded-full"></span> 
+                                                    <span className="font-bold text-slate-400 w-16">Penjual</span> 
+                                                    <span className="font-black text-slate-700 truncate">: {sellerInfo.name} 
+                                                        <span className="font-black text-[#FF9500] text-[10px] ml-1">({sellerInfo.campus})</span>
+                                                    </span>
+                                                </p>
                                             </div>
                                         </div>
 
@@ -85,7 +145,7 @@ export default function TabTransactions({
                                                 )}
                                             </div>
 
-                                            {(trx.status === 'Selesai' || trx.status === 'Dana Dicairkan') && trx.sellerId && (
+                                            {(trx.status === 'Selesai' || trx.status === 'Dana Dicairkan') && typeof trx.sellerId === 'object' && (
                                                 <div className="p-5 bg-slate-900 text-white rounded-[2rem] shadow-xl border border-slate-800">
                                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block">Tujuan Pencairan (Penjual)</span>
                                                     {trx.sellerId.qrisUrl ? (
@@ -133,7 +193,7 @@ export default function TabTransactions({
                             );
                         })}
                     </div>
-                    <Pagination totalItems={statusFilter === 'Semua' ? transactions.length : transactions.filter(t => t.status === statusFilter).length} itemsPerPage={itemsPerPage} currentPage={currentPage} setCurrentPage={setCurrentPage} />
+                    <Pagination totalItems={finalFiltered.length} itemsPerPage={itemsPerPage} currentPage={currentPage} setCurrentPage={setCurrentPage} />
                 </>
             )}
         </div>

@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../../api/axios';
-import { Search, MapPin, Star, Building, ChevronLeft, ChevronRight, X, ArrowRight, CheckCircle2 } from 'lucide-react';
+import useAuthStore from '../../store/authStore';
+import { Search, MapPin, Star, Building, ChevronLeft, ChevronRight, X, ArrowRight, CheckCircle2, School } from 'lucide-react';
 
 export default function Home() {
     const navigate = useNavigate();
+    const { user } = useAuthStore(); // Ambil state user untuk mengecek kampus
+
     const [topShops, setTopShops] = useState([]);
+    const [campusProducts, setCampusProducts] = useState([]); // State untuk produk eksklusif kampus
     const [loading, setLoading] = useState(true);
 
     // Filter State
@@ -23,12 +27,27 @@ export default function Home() {
     useEffect(() => {
         const fetchHomeData = async () => {
             try {
-                const [shopsRes, campusRes] = await Promise.all([
+                // Siapkan array promise dasar
+                const promises = [
                     api.get('/products/top-shops'),
                     api.get('/products/campuses')
-                ]);
-                setTopShops(shopsRes.data.data);
-                setCampuses(campusRes.data.data);
+                ];
+
+                // Tambahkan fetch eksklusif kampus jika user login dan punya data kampus
+                if (user && user.campus) {
+                    promises.push(api.get(`/products?status=Tersedia&campus=${encodeURIComponent(user.campus)}&limit=4`));
+                }
+
+                // Eksekusi semua secara bersamaan
+                const results = await Promise.all(promises);
+                
+                setTopShops(results[0].data.data);
+                setCampuses(results[1].data.data);
+
+                // Jika ada result ke-3, berarti itu adalah data produk eksklusif kampus
+                if (results.length > 2) {
+                    setCampusProducts(results[2].data.data);
+                }
             } catch (error) {
                 console.error("Gagal memuat data home", error);
             } finally {
@@ -36,7 +55,7 @@ export default function Home() {
             }
         };
         fetchHomeData();
-    }, []);
+    }, [user]);
 
     const handleSearchSubmit = (e) => {
         e.preventDefault();
@@ -48,6 +67,40 @@ export default function Home() {
     const filteredCampuses = campuses.filter(c => c.toLowerCase().includes(campusSearch.toLowerCase()));
     const totalCampusPages = Math.ceil(filteredCampuses.length / campusesPerPage);
     const displayedCampuses = filteredCampuses.slice((campusPage - 1) * campusesPerPage, campusPage * campusesPerPage);
+
+    // Render Card Helper untuk Produk Eksklusif Kampus
+    const renderProductCard = (product) => (
+        <Link to={`/product/${product._id}`} key={product._id} className="group bg-white rounded-[2rem] overflow-hidden border border-slate-100 hover:shadow-2xl hover:-translate-y-1 transition-all duration-500 flex flex-col h-full relative">
+            <div className="relative overflow-hidden aspect-[4/5] bg-slate-50">
+                <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
+                    <span className="bg-white/90 backdrop-blur-md text-[#00478F] px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm">
+                        {product.category?.name || product.category || 'Barang'}
+                    </span>
+                </div>
+                <img 
+                    src={product.images && product.images.length > 0 ? product.images[0] : product.imageUrl} 
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                    alt={product.title} 
+                />
+            </div>
+            
+            <div className="p-5 flex flex-col flex-1">
+                <h3 className="font-bold text-slate-800 text-sm line-clamp-2 mb-3 group-hover:text-[#00478F] transition-colors leading-snug">
+                    {product.title}
+                </h3>
+                <div className="mt-auto pt-4 border-t border-slate-100 flex items-end justify-between">
+                    <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Harga</span>
+                        <span className="font-black text-lg text-[#00478F] leading-none">Rp{product.price.toLocaleString('id-ID')}</span>
+                    </div>
+                </div>
+                <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
+                    <MapPin size={12} className="text-[#FF9500]" />
+                    <span className="truncate">{product.sellerId?.campus || 'Kampus Rahasia'}</span>
+                </div>
+            </div>
+        </Link>
+    );
 
     if (loading) return <div className="flex justify-center items-center min-h-screen"><div className="w-12 h-12 border-4 border-t-[#00478F] border-slate-100 rounded-full animate-spin"></div></div>;
 
@@ -97,59 +150,86 @@ export default function Home() {
                 </div>
             </div>
 
-            {/* TOP 5 SHOPS & CATALOG */}
-            <div className="max-w-6xl mx-auto px-4 -mt-20 relative z-20 space-y-12">
-                <div className="flex items-center justify-between bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-                    <div>
-                        <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3"><Star className="text-[#FF9500]" fill="currentColor"/> Top 5 Toko Terpopuler</h2>
-                        <p className="text-sm text-slate-500 font-medium mt-1">Berdasarkan akumulasi rating dan jumlah ulasan terbanyak.</p>
+            {/* SECTIONS BAAWAH */}
+            <div className="max-w-6xl mx-auto px-4 -mt-20 relative z-20 space-y-16">
+                
+                {/* ============================================== */}
+                {/* RAK BARU: EKSKLUSIF KAMPUSMU                   */}
+                {/* ============================================== */}
+                {user && campusProducts.length > 0 && (
+                    <div className="pt-2">
+                        <div className="flex items-end justify-between mb-6 px-2">
+                            <div>
+                                <h2 className="text-2xl md:text-3xl font-black text-slate-900 flex items-center gap-3">
+                                    <School className="text-[#FF9500] bg-white p-2 rounded-2xl shadow-sm border border-slate-100 w-12 h-12" /> Eksklusif Kampusmu
+                                </h2>
+                                <p className="text-slate-100 md:text-slate-500 text-sm font-medium mt-2">Barang incaran dari sesama anak <span className="font-bold text-white md:text-slate-700">{user.campus}</span></p>
+                            </div>
+                            <Link to={`/explore?campus=${user.campus}`} className="text-[#00478F] font-black text-xs uppercase tracking-widest hover:text-[#FF9500] transition-colors bg-white/90 backdrop-blur-md px-4 py-3 rounded-xl hidden sm:block shadow-sm">Lihat Semua</Link>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+                            {campusProducts.map(renderProductCard)}
+                        </div>
+                        <Link to={`/explore?campus=${user.campus}`} className="sm:hidden block mt-6 text-center text-[#00478F] font-black text-xs uppercase tracking-widest bg-blue-50 px-4 py-3 rounded-xl shadow-sm border border-blue-100">Lihat Semua di Kampus</Link>
                     </div>
-                    <button onClick={() => navigate('/explore')} className="hidden md:flex items-center gap-2 bg-[#00478F] text-white px-6 py-3 rounded-xl font-black text-sm hover:bg-slate-900 transition-colors shadow-lg">
-                        Eksplor Semua Barang <ArrowRight size={16} />
-                    </button>
+                )}
+
+                {/* ============================================== */}
+                {/* TOP 5 SHOPS & CATALOG                          */}
+                {/* ============================================== */}
+                <div className="space-y-12">
+                    <div className="flex items-center justify-between bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                        <div>
+                            <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3"><Star className="text-[#FF9500]" fill="currentColor"/> Top 5 Toko Terpopuler</h2>
+                            <p className="text-sm text-slate-500 font-medium mt-1">Berdasarkan akumulasi rating dan jumlah ulasan terbanyak.</p>
+                        </div>
+                        <button onClick={() => navigate('/explore')} className="hidden md:flex items-center gap-2 bg-[#00478F] text-white px-6 py-3 rounded-xl font-black text-sm hover:bg-slate-900 transition-colors shadow-lg">
+                            Eksplor Semua Barang <ArrowRight size={16} />
+                        </button>
+                    </div>
+
+                    {topShops.map((shop, index) => (
+                        <div key={shop.seller._id} className="bg-white rounded-[2.5rem] p-6 md:p-8 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-slate-100">
+                            {/* Identitas Toko */}
+                            <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-50">
+                                <div className="flex items-center gap-4">
+                                    <div className="relative">
+                                        <span className="absolute -top-3 -left-3 w-8 h-8 bg-[#FF9500] text-white font-black flex items-center justify-center rounded-full border-4 border-white shadow-md">#{index + 1}</span>
+                                        <img src={shop.seller.profilePicture || 'https://via.placeholder.com/150'} className="w-16 h-16 rounded-full object-cover ring-2 ring-slate-100" alt={shop.seller.name} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-black text-slate-900 flex items-center gap-1.5">{shop.seller.name} {shop.seller.isVerified && <CheckCircle2 className="text-blue-500" size={16}/>}</h3>
+                                        <div className="flex items-center gap-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-1">
+                                            <span className="flex items-center gap-1"><MapPin size={12}/> {shop.seller.campus}</span>
+                                            <span className="flex items-center gap-1 text-[#FF9500]"><Star size={12} fill="currentColor"/> {shop.seller.rating?.toFixed(1) || 'N/A'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button onClick={() => navigate(`/seller/${shop.seller._id}`)} className="text-[#00478F] font-black text-xs uppercase tracking-widest hover:underline underline-offset-4 hidden sm:block">Kunjungi Toko</button>
+                            </div>
+
+                            {/* Daftar Produk Horizontal */}
+                            <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
+                                {shop.products.map(product => (
+                                    <div key={product._id} onClick={() => navigate(`/product/${product._id}`)} className="snap-start shrink-0 w-[200px] bg-slate-50 rounded-3xl overflow-hidden border border-slate-100 hover:border-blue-200 hover:shadow-lg transition-all cursor-pointer group">
+                                        <div className="w-full h-48 overflow-hidden bg-slate-200">
+                                            <img src={(product.images && product.images.length > 0) ? product.images[0] : product.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={product.title} />
+                                        </div>
+                                        <div className="p-4">
+                                            <p className="text-sm font-bold text-slate-800 line-clamp-1 group-hover:text-[#00478F]">{product.title}</p>
+                                            <p className="text-base font-black text-[#00478F] mt-1">Rp{product.price.toLocaleString('id-ID')}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                                {/* Card Lihat Lainnya */}
+                                <div onClick={() => navigate(`/seller/${shop.seller._id}`)} className="snap-start shrink-0 w-[150px] bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 hover:border-[#00478F] transition-all text-slate-400 hover:text-[#00478F]">
+                                    <ArrowRight size={32} className="mb-2" />
+                                    <span className="text-xs font-black uppercase tracking-widest text-center px-4">Lihat Lainnya</span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
                 </div>
-
-                {topShops.map((shop, index) => (
-                    <div key={shop.seller._id} className="bg-white rounded-[2.5rem] p-6 md:p-8 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-slate-100">
-                        {/* Identitas Toko */}
-                        <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-50">
-                            <div className="flex items-center gap-4">
-                                <div className="relative">
-                                    <span className="absolute -top-3 -left-3 w-8 h-8 bg-[#FF9500] text-white font-black flex items-center justify-center rounded-full border-4 border-white shadow-md">#{index + 1}</span>
-                                    <img src={shop.seller.profilePicture || 'https://via.placeholder.com/150'} className="w-16 h-16 rounded-full object-cover ring-2 ring-slate-100" alt={shop.seller.name} />
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-black text-slate-900 flex items-center gap-1.5">{shop.seller.name} {shop.seller.isVerified && <CheckCircle2 className="text-blue-500" size={16}/>}</h3>
-                                    <div className="flex items-center gap-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-1">
-                                        <span className="flex items-center gap-1"><MapPin size={12}/> {shop.seller.campus}</span>
-                                        <span className="flex items-center gap-1 text-[#FF9500]"><Star size={12} fill="currentColor"/> {shop.seller.rating?.toFixed(1) || 'N/A'}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <button onClick={() => navigate(`/seller/${shop.seller._id}`)} className="text-[#00478F] font-black text-xs uppercase tracking-widest hover:underline underline-offset-4 hidden sm:block">Kunjungi Toko</button>
-                        </div>
-
-                        {/* Daftar Produk Horizontal */}
-                        <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
-                            {shop.products.map(product => (
-                                <div key={product._id} onClick={() => navigate(`/product/${product._id}`)} className="snap-start shrink-0 w-[200px] bg-slate-50 rounded-3xl overflow-hidden border border-slate-100 hover:border-blue-200 hover:shadow-lg transition-all cursor-pointer group">
-                                    <div className="w-full h-48 overflow-hidden bg-slate-200">
-                                        <img src={(product.images && product.images.length > 0) ? product.images[0] : product.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={product.title} />
-                                    </div>
-                                    <div className="p-4">
-                                        <p className="text-sm font-bold text-slate-800 line-clamp-1 group-hover:text-[#00478F]">{product.title}</p>
-                                        <p className="text-base font-black text-[#00478F] mt-1">Rp{product.price.toLocaleString('id-ID')}</p>
-                                    </div>
-                                </div>
-                            ))}
-                            {/* Card Lihat Lainnya */}
-                            <div onClick={() => navigate(`/seller/${shop.seller._id}`)} className="snap-start shrink-0 w-[150px] bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 hover:border-[#00478F] transition-all text-slate-400 hover:text-[#00478F]">
-                                <ArrowRight size={32} className="mb-2" />
-                                <span className="text-xs font-black uppercase tracking-widest text-center px-4">Lihat Lainnya</span>
-                            </div>
-                        </div>
-                    </div>
-                ))}
 
                 <button onClick={() => navigate('/explore')} className="w-full md:hidden flex items-center justify-center gap-2 bg-[#00478F] text-white px-6 py-4 rounded-2xl font-black text-sm hover:bg-slate-900 transition-colors shadow-lg mt-6">
                     Eksplor Semua Barang Katalog <ArrowRight size={16} />
