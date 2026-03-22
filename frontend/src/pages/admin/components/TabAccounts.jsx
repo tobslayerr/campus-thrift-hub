@@ -33,10 +33,10 @@ export default function TabAccounts({
                                         <label className="px-5 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-full cursor-pointer hover:bg-blue-600">Ganti QRIS<input type="file" accept="image/*" onChange={handleQrChange} className="hidden"/></label>
                                     </div>
                                 ) : (
-                                    <label className="flex flex-col items-center cursor-pointer text-slate-400 group-hover:text-blue-500 transition-colors">
+                                    <label className="flex flex-col items-center cursor-pointer text-slate-400 group-hover:text-blue-500 transition-colors w-full h-full">
                                         <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center shadow-sm mb-4 group-hover:scale-110 transition-transform"><ImagePlus size={32} /></div>
                                         <span className="text-[10px] font-black uppercase tracking-[0.2em]">Pilih File Gambar</span>
-                                        <input type="file" accept="image/*" onChange={handleQrChange} className="hidden"/>
+                                        <input type="file" accept="image/*" onChange={handleQrChange} className="hidden" />
                                     </label>
                                 )}
                             </div>

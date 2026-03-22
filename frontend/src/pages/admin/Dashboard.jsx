@@ -202,25 +202,36 @@ export default function Dashboard() {
     const handleAddPaymentMethod = async (e) => {
         e.preventDefault();
         const formData = new FormData();
+        
         if (paymentType === 'bank') {
             formData.append('bankName', newBank.bankName); 
             formData.append('accountNumber', newBank.accountNumber); 
             formData.append('ownerName', newBank.ownerName);
         } else {
+            // Validasi agar admin tidak lupa upload gambar QRIS
+            if (!qrFile) return toast.error("Harap upload gambar QRIS terlebih dahulu!");
+
             formData.append('bankName', 'QRIS'); 
             formData.append('accountNumber', '-'); 
             formData.append('ownerName', 'Admin'); 
-            formData.append('qrImage', qrFile);
+            formData.append('qrImage', qrFile); // File masuk ke Form Data
         }
+        
         const tid = toast.loading("Menambahkan...");
         try { 
-            await api.post('/payment-methods', formData); 
+            // 🌟 PERBAIKAN FATAL: Tambahkan header multipart/form-data di sini
+            await api.post('/payment-methods', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            }); 
+            
             toast.success("Berhasil!", {id: tid}); 
             setNewBank({bankName:'', accountNumber:'', ownerName:''}); 
             setQrFile(null); 
             setQrPreview(null); 
             fetchPaymentMethods(); 
-        } catch (e) { toast.error("Gagal", {id: tid}); }
+        } catch (e) { 
+            toast.error("Gagal", {id: tid}); 
+        }
     };
 
     const handleDeleteBank = (id) => {
