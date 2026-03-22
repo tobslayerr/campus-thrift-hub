@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { 
     ArrowLeft, MessageSquare, ShieldCheck, 
     Star, MapPin, School, PlusCircle, 
-    ChevronRight, Clock, Award, Edit, Trash2, Box, ImagePlus, X
+    ChevronRight, Clock, Award, Edit, Trash2, Box, ImagePlus, X, Heart
 } from 'lucide-react';
 
 export default function ProductDetail() {
@@ -18,6 +18,9 @@ export default function ProductDetail() {
     const [product, setProduct] = useState(null);
     const [reviews, setReviews] = useState([]); 
     const [loading, setLoading] = useState(true);
+
+    // STATE WISHLIST
+    const [isSaved, setIsSaved] = useState(false);
 
     // STATE UNTUK FORM ULASAN
     const [ratingForm, setRatingForm] = useState(5);
@@ -49,6 +52,15 @@ export default function ProductDetail() {
 
                 const reviewRes = await api.get(`/reviews/product/${id}`);
                 setReviews(reviewRes.data.data); 
+
+                // ==========================================
+                // CEK STATUS WISHLIST
+                // ==========================================
+                if (user) {
+                    const wishRes = await api.get(`/users/wishlist/check/${id}`);
+                    setIsSaved(wishRes.data.isSaved);
+                }
+
             } catch (error) {
                 // Jika backend mengirim status 404 (Data tidak ada di DB) atau error lain
                 console.error(error);
@@ -58,7 +70,27 @@ export default function ProductDetail() {
             }
         };
         fetchData();
-    }, [id, navigate]);
+        window.scrollTo(0, 0); // Pastikan layar kembali ke atas saat komponen di-load
+    }, [id, navigate, user]);
+
+    // HANDLER TOGGLE WISHLIST
+    const handleToggleWishlist = async () => {
+        if (!user) {
+            toast.error("Silakan login untuk menyimpan barang ke wishlist.");
+            return navigate('/login');
+        }
+        try {
+            const res = await api.post(`/users/wishlist/${id}`);
+            setIsSaved(res.data.isSaved); 
+            if (res.data.isSaved) {
+                toast.success(res.data.message, { icon: '❤️' });
+            } else {
+                toast.success(res.data.message);
+            }
+        } catch (error) {
+            toast.error("Gagal mengubah wishlist");
+        }
+    };
 
     // HANDLER HAPUS BARANG
     const handleDeleteProduct = async () => {
@@ -188,13 +220,28 @@ export default function ProductDetail() {
                     {/* ================================== */}
                     <div className="lg:col-span-5 flex flex-col">
                         <div className="bg-white p-8 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                            
+                            {/* TOMBOL WISHLIST DAN KATEGORI */}
                             <div className="flex items-center justify-between mb-4">
-                                <span className="bg-[#FF9500]/10 text-[#FF9500] px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-[#FF9500]/20">
-                                    {product.category?.name || product.category || 'Kategori'}
-                                </span>
-                                <div className="flex items-center gap-1 text-slate-500 text-xs font-black bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
-                                    <Box size={14} className="text-[#00478F]" /> Stok: {product.stock || 0}
+                                <div className="flex items-center gap-2">
+                                    <span className="bg-[#FF9500]/10 text-[#FF9500] px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border border-[#FF9500]/20">
+                                        {product.category?.name || product.category || 'Kategori'}
+                                    </span>
+                                    <div className="flex items-center gap-1 text-slate-500 text-xs font-black bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
+                                        <Box size={14} className="text-[#00478F]" /> Stok: {product.stock || 0}
+                                    </div>
                                 </div>
+                                
+                                {/* 🌟 TOMBOL WISHLIST 🌟 */}
+                                {!isMine && (
+                                    <button 
+                                        onClick={handleToggleWishlist} 
+                                        className={`p-3 rounded-full transition-all shrink-0 border-2 ${isSaved ? 'bg-red-50 text-red-500 border-red-200 shadow-inner' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-red-50 hover:text-red-500 hover:border-red-200'}`}
+                                        title={isSaved ? "Hapus dari Wishlist" : "Simpan ke Wishlist"}
+                                    >
+                                        <Heart size={20} fill={isSaved ? "currentColor" : "none"} className={isSaved ? "animate-in zoom-in duration-300" : ""} />
+                                    </button>
+                                )}
                             </div>
 
                             <h1 className="text-3xl md:text-4xl font-black text-slate-900 leading-tight mb-4">
@@ -405,7 +452,7 @@ export default function ProductDetail() {
                     </div>
 
                     <div className="lg:col-span-5">
-                        <div className="bg-[#FF9500] p-8 rounded-[2.5rem] text-white overflow-hidden sticky top-24">
+                        <div className="bg-[#FF9500] p-8 rounded-[2.5rem] text-white relative overflow-hidden top-24">
                             <h4 className="text-xl font-black mb-2 relative z-10">Keamanan Escrow</h4>
                             <p className="text-orange-100 text-sm font-medium relative z-10 mb-6">Uang Anda aman dan hanya akan cair ke penjual setelah Anda mengkonfirmasi barang diterima dengan baik.</p>
                             <ShieldCheck size={120} className="absolute -bottom-8 -right-8 text-white/20 rotate-12" />

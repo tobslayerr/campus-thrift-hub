@@ -71,6 +71,66 @@ exports.updateProfile = async (req, res) => {
     }
 };
 
+// @desc    Toggle (Tambah/Hapus) Wishlist
+// @route   POST /api/users/wishlist/:productId
+exports.toggleWishlist = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const productId = req.params.productId;
+
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
+
+        const index = user.wishlist.indexOf(productId);
+        if (index > -1) {
+            // Hapus dari wishlist
+            user.wishlist.splice(index, 1);
+            await user.save();
+            return res.status(200).json({ success: true, message: 'Dihapus dari wishlist', isSaved: false });
+        } else {
+            // Tambahkan ke wishlist
+            user.wishlist.push(productId);
+            await user.save();
+            return res.status(200).json({ success: true, message: 'Disimpan ke wishlist', isSaved: true });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// @desc    Get Semua Wishlist Saya
+// @route   GET /api/users/wishlist
+exports.getWishlist = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const user = await User.findById(userId).populate({
+            path: 'wishlist',
+            populate: [
+                { path: 'sellerId', select: 'name campus rating profilePicture isVerified' },
+                { path: 'category', select: 'name' }
+            ]
+        });
+
+        if (!user) return res.status(404).json({ message: 'User tidak ditemukan' });
+
+        res.status(200).json({ success: true, data: user.wishlist.reverse() }); // Terbaru di atas
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// @desc    Cek status apakah barang ini ada di Wishlist
+// @route   GET /api/users/wishlist/check/:productId
+exports.checkWishlist = async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        const isSaved = user.wishlist.includes(req.params.productId);
+        res.status(200).json({ success: true, isSaved });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 // @desc    Ambil Profil Publik Penjual + Barang Jualannya
 // @route   GET /api/users/seller/:id
 exports.getSellerProfile = async (req, res) => {

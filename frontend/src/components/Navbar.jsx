@@ -4,7 +4,7 @@ import useAuthStore from '../store/authStore';
 import api from '../api/axios';
 import { 
   Menu, X, MessageSquare, ClipboardList, 
-  PlusCircle, LogOut, User as UserIcon, Bell, Loader2 
+  PlusCircle, LogOut, User as UserIcon, Bell, Loader2, Heart 
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -80,6 +80,11 @@ export default function Navbar() {
                 
                 <NavLink to="/chats" className={navItemStyle}>
                   <MessageSquare size={18} /><span>Pesan</span>
+                </NavLink>
+
+                {/* 🌟 TOMBOL WISHLIST (DESKTOP) */}
+                <NavLink to="/wishlist" className={navItemStyle} title="Barang Tersimpan">
+                  <Heart size={18} className="group-hover:text-red-500 transition-colors" /><span>Wishlist</span>
                 </NavLink>
 
                 <NavLink to="/notifications" className={navItemStyle}>
@@ -160,6 +165,13 @@ export default function Navbar() {
 
               <NavLink to="/transactions" onClick={toggleSidebar} className={navItemStyle}><ClipboardList size={22} /> <span>Riwayat Transaksi</span></NavLink>
               <NavLink to="/chats" onClick={toggleSidebar} className={navItemStyle}><MessageSquare size={22} /> <span>Pesan Chat</span></NavLink>
+              
+              {/* 🌟 TOMBOL WISHLIST (MOBILE) */}
+              <NavLink to="/wishlist" onClick={toggleSidebar} className={navItemStyle}>
+                  <Heart size={22} className="group-hover:text-red-500 transition-colors" /> 
+                  <span>Barang Tersimpan</span>
+              </NavLink>
+
               <NavLink to="/notifications" onClick={toggleSidebar} className={navItemStyle}>
                   <Bell size={22} /> 
                   <span>Notifikasi</span>

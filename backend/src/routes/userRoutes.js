@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 
 // PERHATIKAN: Ubah userController menjadi UserController (U besar)
-const { updateProfile, getSellerProfile, getAllUsersForAdmin, banUser } = require('../controllers/UserController');
+const { updateProfile, getSellerProfile, getAllUsersForAdmin, banUser, toggleWishlist,
+    getWishlist,
+    checkWishlist } = require('../controllers/UserController');
 
 const { protect } = require('../middlewares/authMiddleware');
 const { upload } = require('../middlewares/upload');
@@ -19,6 +21,9 @@ router.put(
     ]), 
     updateProfile
 );
+router.post('/wishlist/:productId', protect, toggleWishlist);
+router.get('/wishlist', protect, getWishlist);
+router.get('/wishlist/check/:productId', protect, checkWishlist);
 
 // Route Terproteksi Khusus Admin
 router.get('/admin/all', protect, getAllUsersForAdmin);

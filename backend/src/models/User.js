@@ -84,7 +84,15 @@ const userSchema = new mongoose.Schema({
     },
     resetPasswordOtpExpires: { 
         type: Date 
-    }
+    },
+
+    // ==========================================
+    // 🌟 FITUR WISHLIST BARU
+    // ==========================================
+    wishlist: [{ 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: 'Product' 
+    }]
 
 }, { timestamps: true });
 

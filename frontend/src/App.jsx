@@ -30,6 +30,9 @@ import ForgotPassword from './pages/auth/ForgotPassword';
 import VerifyOTP from './pages/auth/VerifyOtp'; 
 import ResetPassword from './pages/auth/ResetPassword';
 
+// Halaman Baru
+import Wishlist from './pages/buyer/Wishlist'; // <--- IMPORT HALAMAN WISHLIST
+
 // ---> IMPORT HALAMAN 404 <---
 import NotFound from './pages/NotFound';
 
@@ -105,6 +108,9 @@ function App() {
             <Route path="/upload" element={<ProtectedRoute><UploadProduct /></ProtectedRoute>} />
             <Route path="/checkout/:id" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
             <Route path="/my-profile" element={<ProtectedRoute><MyProfile /></ProtectedRoute>} />
+            
+            <Route path="/wishlist" element={<ProtectedRoute><Wishlist /></ProtectedRoute>} /> {/* <--- TAMBAHKAN ROUTE WISHLIST DI SINI */}
+            
             <Route path="/chat/:id" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
             <Route path="/chats" element={<ProtectedRoute><ChatList /></ProtectedRoute>} />
             <Route path="/transactions" element={<ProtectedRoute><MyTransactions /></ProtectedRoute>} />
