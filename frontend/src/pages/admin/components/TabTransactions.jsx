@@ -141,7 +141,12 @@ export default function TabTransactions({
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="px-3 py-1.5 rounded-lg border shadow-sm inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest bg-orange-50 text-orange-600 border-orange-200"><MapPin size={12} /> COD (Ketemuan)</div>
+                                                    <div>
+                                                        <div className="px-3 py-1.5 rounded-lg border shadow-sm inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest bg-orange-50 text-orange-600 border-orange-200 mb-3"><MapPin size={12} /> COD (Ketemuan)</div>
+                                                        <div className="space-y-2 border-t border-slate-200 pt-3">
+                                                            <div><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Titik Temu Spesifik</p><p className="text-xs font-bold text-slate-800 leading-relaxed">{trx.codMeetingPoint || 'Belum ditentukan'}</p></div>
+                                                        </div>
+                                                    </div>
                                                 )}
                                             </div>
 

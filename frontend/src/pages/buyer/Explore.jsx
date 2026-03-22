@@ -250,32 +250,47 @@ export default function Explore() {
                         </div>
                     ) : (
                         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-                            {products.map(product => (
-                                <Link to={`/product/${product._id}`} key={product._id} className="group bg-white rounded-[2rem] overflow-hidden border border-slate-100 hover:shadow-2xl hover:-translate-y-1 transition-all duration-500 flex flex-col h-full">
-                                    <div className="relative overflow-hidden aspect-[4/5] bg-slate-50">
-                                        <img src={product.images && product.images.length > 0 ? product.images[0] : product.imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={product.title} />
-                                    </div>
-                                    <div className="p-4 md:p-5 flex flex-col flex-1">
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-[#FF9500] mb-2">{product.category?.name || product.category || 'Barang'}</span>
-                                        <h3 className="font-bold text-slate-800 text-sm line-clamp-2 mb-3 group-hover:text-[#00478F]">{product.title}</h3>
-                                        <div className="mt-auto flex items-end justify-between">
-                                            <span className="font-black text-[#00478F] text-lg">Rp{product.price.toLocaleString('id-ID')}</span>
-                                        </div>
-                                        <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-1.5 text-[10px] font-bold text-slate-400">
-                                            <div className="flex items-center gap-1 min-w-0">
-                                                <MapPin size={12} className="text-[#FF9500] shrink-0" />
-                                                <span className="truncate">{product.sellerId?.campus || 'Kampus Rahasia'}</span>
+                            {products.map(product => {
+                                // Cek apakah ini barang milik user sendiri
+                                const isMyProduct = user && (product.sellerId?._id === user.id || product.sellerId === user.id);
+
+                                return (
+                                    <Link to={`/product/${product._id}`} key={product._id} className="group bg-white rounded-[2rem] overflow-hidden border border-slate-100 hover:border-blue-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-500 flex flex-col h-full relative">
+                                        <div className="relative overflow-hidden aspect-[4/5] bg-slate-50">
+                                            <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 items-start">
+                                                <span className="bg-white/90 backdrop-blur-md text-[#00478F] px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm">
+                                                    {product.category?.name || product.category || 'Barang'}
+                                                </span>
+                                                {/* HINT: Barang Milik Sendiri */}
+                                                {isMyProduct && (
+                                                    <span className="bg-[#FF9500] text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm">
+                                                        Milikmu
+                                                    </span>
+                                                )}
                                             </div>
-                                            {product.sellerId?.rating > 0 && (
-                                                <div className="flex items-center gap-1 shrink-0 text-[#FF9500]">
-                                                    <Star size={10} fill="currentColor" />
-                                                    <span>{product.sellerId.rating.toFixed(1)}</span>
-                                                </div>
-                                            )}
+                                            <img src={product.images && product.images.length > 0 ? product.images[0] : product.imageUrl} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={product.title} />
                                         </div>
-                                    </div>
-                                </Link>
-                            ))}
+                                        <div className="p-4 md:p-5 flex flex-col flex-1">
+                                            <h3 className="font-bold text-slate-800 text-sm line-clamp-2 mb-3 group-hover:text-[#00478F]">{product.title}</h3>
+                                            <div className="mt-auto flex items-end justify-between border-t border-slate-100 pt-3">
+                                                <span className="font-black text-[#00478F] text-lg">Rp{product.price.toLocaleString('id-ID')}</span>
+                                            </div>
+                                            <div className="mt-2 pt-2 flex items-center justify-between gap-1.5 text-[10px] font-bold text-slate-400">
+                                                <div className="flex items-center gap-1 min-w-0">
+                                                    <MapPin size={12} className="text-[#FF9500] shrink-0" />
+                                                    <span className="truncate">{product.sellerId?.campus || 'Kampus Rahasia'}</span>
+                                                </div>
+                                                {product.sellerId?.rating > 0 && (
+                                                    <div className="flex items-center gap-1 shrink-0 text-[#FF9500]">
+                                                        <Star size={10} fill="currentColor" />
+                                                        <span>{product.sellerId.rating.toFixed(1)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </Link>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
@@ -284,7 +299,7 @@ export default function Explore() {
             {/* ================= MODAL KAMPUS PAGINATION ================= */}
             {isCampusModalOpen && (
                 <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95">
+                    <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 border border-slate-100">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-black text-slate-900">Pilih Kampus</h2>
                             <button onClick={() => setIsCampusModalOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-red-100 hover:text-red-500 transition-colors"><X size={20}/></button>
@@ -298,7 +313,7 @@ export default function Explore() {
                         <div className="space-y-2 mb-6 min-h-[300px]">
                             <button 
                                 onClick={() => { setCampusFilter('Semua Kampus'); setIsCampusModalOpen(false); }}
-                                className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition-colors ${campusFilter === 'Semua Kampus' ? 'bg-[#00478F] text-white shadow-md' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
+                                className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition-colors border ${campusFilter === 'Semua Kampus' ? 'bg-[#00478F] text-white border-[#00478F] shadow-md' : 'bg-slate-50 text-slate-700 border-transparent hover:bg-slate-100'}`}
                             >
                                 🌍 Semua Kampus
                             </button>
@@ -306,7 +321,7 @@ export default function Explore() {
                                 <button 
                                     key={campus} 
                                     onClick={() => { setCampusFilter(campus); setIsCampusModalOpen(false); }}
-                                    className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition-colors ${campusFilter === campus ? 'bg-[#00478F] text-white shadow-md' : 'bg-white border border-slate-100 text-slate-700 hover:border-[#00478F]'}`}
+                                    className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition-colors border ${campusFilter === campus ? 'bg-[#00478F] text-white border-[#00478F] shadow-md' : 'bg-white border-slate-200 text-slate-700 hover:border-[#00478F]'}`}
                                 >
                                     {campus}
                                 </button>
@@ -314,12 +329,13 @@ export default function Explore() {
                             {displayedCampuses.length === 0 && <p className="text-center text-slate-400 font-bold mt-10">Kampus tidak ditemukan.</p>}
                         </div>
 
+                        {/* Pagination Kampus */}
                         {totalCampusPages > 1 && (
                             <div className="flex items-center justify-between border-t border-slate-100 pt-4">
                                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Hal {campusPage} / {totalCampusPages}</span>
                                 <div className="flex gap-2">
-                                    <button onClick={() => setCampusPage(p => Math.max(1, p - 1))} disabled={campusPage === 1} className="p-2 bg-slate-100 rounded-lg disabled:opacity-50 hover:bg-slate-200"><ChevronLeft size={18}/></button>
-                                    <button onClick={() => setCampusPage(p => Math.min(totalCampusPages, p + 1))} disabled={campusPage === totalCampusPages} className="p-2 bg-slate-100 rounded-lg disabled:opacity-50 hover:bg-slate-200"><ChevronRight size={18}/></button>
+                                    <button onClick={() => setCampusPage(p => Math.max(1, p - 1))} disabled={campusPage === 1} className="p-2 bg-slate-100 border border-slate-200 rounded-lg disabled:opacity-50 hover:bg-slate-200"><ChevronLeft size={18}/></button>
+                                    <button onClick={() => setCampusPage(p => Math.min(totalCampusPages, p + 1))} disabled={campusPage === totalCampusPages} className="p-2 bg-slate-100 border border-slate-200 rounded-lg disabled:opacity-50 hover:bg-slate-200"><ChevronRight size={18}/></button>
                                 </div>
                             </div>
                         )}

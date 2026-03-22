@@ -14,10 +14,11 @@ const transactionSchema = new mongoose.Schema({
     deliveryMethod: { type: String, enum: ['COD', 'Pengiriman'], default: 'COD' },
     shippingCourier: { type: String },
     shippingResi: { type: String },
-    shippingProgress: { type: String, default: 'Menunggu diproses penjual' }, // <--- FIELD BARU PENGEMASAN
+    shippingProgress: { type: String, default: 'Menunggu diproses penjual' }, 
     buyerAddress: { type: String },       
     buyerPhone: { type: String },         
     buyerLocationPoint: { type: String }, 
+    codMeetingPoint: { type: String }, // <--- FIELD BARU TITIK TEMU COD
     
     status: { 
         type: String, 

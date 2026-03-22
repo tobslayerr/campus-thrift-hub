@@ -6,7 +6,15 @@ const { uploadToCloudinary } = require('../middlewares/upload');
 
 exports.checkout = async (req, res) => {
     try {
-        const { productId, paymentMethod, deliveryMethod, buyerAddress, buyerPhone, buyerLocationPoint } = req.body;
+        const { 
+            productId, 
+            paymentMethod, 
+            deliveryMethod, 
+            buyerAddress, 
+            buyerPhone, 
+            buyerLocationPoint, 
+            codMeetingPoint // <--- PENAMBAHAN FIELD TITIK TEMU COD
+        } = req.body;
         const buyerId = req.user.id;
 
         const product = await Product.findById(productId);
@@ -20,9 +28,14 @@ exports.checkout = async (req, res) => {
             return res.status(400).json({ message: 'Maaf, stok barang sudah habis atau sudah terjual!' });
         }
 
+        // VALIDASI ALAMAT PENGIRIMAN VS COD
         if (deliveryMethod === 'Pengiriman') {
             if (!buyerAddress || !buyerPhone || !buyerLocationPoint) {
                 return res.status(400).json({ message: 'Alamat lengkap, No HP, dan Titik Patokan wajib diisi untuk pengiriman!' });
+            }
+        } else if (deliveryMethod === 'COD') {
+            if (!codMeetingPoint) {
+                return res.status(400).json({ message: 'Titik Temu COD wajib diisi agar penjual tahu lokasi pertemuan!' });
             }
         }
 
@@ -54,7 +67,8 @@ exports.checkout = async (req, res) => {
             deliveryMethod: deliveryMethod || 'COD',
             buyerAddress,         
             buyerPhone,           
-            buyerLocationPoint    
+            buyerLocationPoint,
+            codMeetingPoint // <--- SIMPAN TITIK TEMU KE DATABASE
         });
 
         product.stock -= 1;
@@ -65,8 +79,8 @@ exports.checkout = async (req, res) => {
             await Notification.create({ userId: buyerId, title: 'Pesanan Dibuat! 🛒', message: `Checkout "${product.title}" via Ekspedisi berhasil. Menunggu verifikasi pembayaran oleh Admin.`, type: 'TRANSACTION' });
             await Notification.create({ userId: product.sellerId, title: 'Pesanan Baru Masuk! 📦', message: `Barang Anda "${product.title}" telah dipesan via Ekspedisi. Menunggu admin memverifikasi pembayaran.`, type: 'TRANSACTION' });
         } else {
-            await Notification.create({ userId: buyerId, title: 'Pesanan Dibuat! 🛒', message: `Checkout "${product.title}" via COD berhasil. Menunggu verifikasi pembayaran oleh Admin.`, type: 'TRANSACTION' });
-            await Notification.create({ userId: product.sellerId, title: 'Pesanan Baru Masuk! 🤝', message: `Barang Anda "${product.title}" telah dipesan via COD. Menunggu admin memverifikasi pembayaran.`, type: 'TRANSACTION' });
+            await Notification.create({ userId: buyerId, title: 'Pesanan Dibuat! 🛒', message: `Checkout "${product.title}" via COD di ${codMeetingPoint} berhasil. Menunggu verifikasi pembayaran oleh Admin.`, type: 'TRANSACTION' });
+            await Notification.create({ userId: product.sellerId, title: 'Pesanan Baru Masuk! 🤝', message: `Barang Anda "${product.title}" telah dipesan via COD. Titik temu di: ${codMeetingPoint}. Menunggu admin memverifikasi pembayaran.`, type: 'TRANSACTION' });
         }
 
         res.status(201).json({ success: true, transaction, message: 'Checkout berhasil, menunggu admin.' });
@@ -98,8 +112,9 @@ exports.updateStatus = async (req, res) => {
                     await Notification.create({ userId: transaction.buyerId, title: 'Pembayaran Diverifikasi 💸', message: `Pembayaran untuk "${productTitle}" telah diverifikasi Admin. Penjual akan segera memproses pengiriman barang Anda.`, type: 'TRANSACTION' });
                     await Notification.create({ userId: transaction.sellerId, title: 'Pesanan Siap Dikirim! 🚚', message: `Uang pembelian "${productTitle}" sudah diamankan sistem. Silakan segera kemas barang, kirim, dan input resi di Dashboard!`, type: 'TRANSACTION' });
                 } else {
-                    await Notification.create({ userId: transaction.buyerId, title: 'Pembayaran Diverifikasi 💸', message: `Pembayaran Anda untuk "${productTitle}" telah diverifikasi Admin. Silakan janjian COD dengan penjual di kampus!`, type: 'TRANSACTION' });
-                    await Notification.create({ userId: transaction.sellerId, title: 'Uang Telah Diamankan 🤝', message: `Uang pembelian "${productTitle}" sudah ditahan sistem. Silakan ketemuan dan minta 4-Digit PIN pembeli untuk pencairan.`, type: 'TRANSACTION' });
+                    const meetingInfo = transaction.codMeetingPoint ? ` di ${transaction.codMeetingPoint}` : '';
+                    await Notification.create({ userId: transaction.buyerId, title: 'Pembayaran Diverifikasi 💸', message: `Pembayaran Anda untuk "${productTitle}" telah diverifikasi Admin. Silakan janjian COD dengan penjual${meetingInfo}!`, type: 'TRANSACTION' });
+                    await Notification.create({ userId: transaction.sellerId, title: 'Uang Telah Diamankan 🤝', message: `Uang pembelian "${productTitle}" sudah ditahan sistem. Silakan ketemuan${meetingInfo} dan minta 4-Digit PIN pembeli untuk pencairan.`, type: 'TRANSACTION' });
                 }
             }
         } else if (status === 'Sengketa') {
@@ -159,21 +174,7 @@ exports.getAllTransactions = async (req, res) => {
         const transactions = await Transaction.find()
             .populate('productId', 'title price images imageUrl')
             .populate('buyerId', 'name email bankName bankAccount bankAccountName') 
-            .populate('sellerId', 'name bankName bankAccount bankAccountName qrisUrl') 
-            .sort({ createdAt: -1 });
-
-        res.status(200).json({ success: true, data: transactions });
-    } catch (error) { res.status(500).json({ success: false, error: error.message }); }
-};
-
-exports.getAllTransactions = async (req, res) => {
-    try {
-        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Akses Ditolak.' });
-        
-        const transactions = await Transaction.find()
-            .populate('productId', 'title price images imageUrl')
-            .populate('buyerId', 'name email bankName bankAccount bankAccountName') 
-            .populate('sellerId', 'name bankName bankAccount bankAccountName qrisUrl') 
+            .populate('sellerId', 'name bankName bankAccount bankAccountName qrisUrl campus') 
             .sort({ createdAt: -1 });
 
         res.status(200).json({ success: true, data: transactions });
@@ -194,7 +195,7 @@ exports.getMyTransactions = async (req, res) => {
 
         let sales = await Transaction.find({ sellerId: userId })
             .populate('productId', 'title imageUrl images price')
-            .populate('buyerId', 'name domisili profilePicture')
+            .populate('buyerId', 'name domisili profilePicture campus')
             .sort({ createdAt: -1 })
             .lean();
 

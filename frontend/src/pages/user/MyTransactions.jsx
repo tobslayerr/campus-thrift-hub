@@ -16,25 +16,19 @@ export default function MyTransactions() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('pembelian');
     
-    // ==========================================
     // STATE TRANSAKSI & PENGIRIMAN
-    // ==========================================
     const [pinInputs, setPinInputs] = useState({});
     const [verifying, setVerifying] = useState(false);
     const [shippingForm, setShippingForm] = useState({}); 
 
-    // ==========================================
     // STATE ULASAN
-    // ==========================================
     const [reviewingTrxId, setReviewingTrxId] = useState(null);
     const [ratingForm, setRatingForm] = useState(5);
     const [commentForm, setCommentForm] = useState('');
     const [reviewImages, setReviewImages] = useState([]);
     const [submittingReview, setSubmittingReview] = useState(false);
 
-    // ==========================================
     // STATE SISTEM LAPORAN PENGGUNA
-    // ==========================================
     const [showReportModal, setShowReportModal] = useState(false);
     const [reportForm, setReportForm] = useState({ 
         reportedUserId: '', transactionId: '', title: '', description: '', evidenceImage: null 
@@ -42,9 +36,7 @@ export default function MyTransactions() {
     const [reportPreview, setReportPreview] = useState(null);
     const [submittingReport, setSubmittingReport] = useState(false);
 
-    // ==========================================
     // STATE SISTEM PENGAJUAN REFUND
-    // ==========================================
     const [showRefundModal, setShowRefundModal] = useState(false);
     const [refundingTrxId, setRefundingTrxId] = useState(null);
     const [refundForm, setRefundForm] = useState({ title: '', reason: '' });
@@ -65,9 +57,7 @@ export default function MyTransactions() {
 
     useEffect(() => { fetchTransactions(); }, []);
 
-    // ==========================================
     // HANDLERS (COD, RESI, PROGRESS, KONFIRMASI)
-    // ==========================================
     const handleVerifyPin = async (transactionId) => {
         const pin = pinInputs[transactionId];
         if (!pin || pin.length !== 4) return toast.error('Masukkan 4 digit PIN dengan benar!');
@@ -113,9 +103,7 @@ export default function MyTransactions() {
         } catch (e) { toast.error(e.response?.data?.message || "Gagal mengonfirmasi", { id: tid }); }
     };
 
-    // ==========================================
     // HANDLER GAMBAR & SUBMIT FORMS
-    // ==========================================
     const handleAddReviewImages = (e) => {
         const files = Array.from(e.target.files);
         if (reviewImages.length + files.length > 5) return toast.error("Maksimal 5 gambar!");
@@ -194,9 +182,7 @@ export default function MyTransactions() {
         finally { setSubmittingRefund(false); }
     };
 
-    // ==========================================
     // BADGE STATUS 
-    // ==========================================
     const getStatusBadge = (trx, tab) => {
         const displayStatus = (tab === 'pembelian' && trx.status === 'Dana Dicairkan') ? 'Selesai' : trx.status;
 
@@ -388,6 +374,12 @@ export default function MyTransactions() {
                                         </>
                                     ) : (
                                         <>
+                                            {/* TAMPILAN LOKASI COD UNTUK PEMBELI DAN PENJUAL */}
+                                            <div className="mt-4 mb-4 p-5 bg-orange-50 border border-orange-100 rounded-2xl">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-orange-600 mb-2 flex items-center gap-2"><MapPin size={14}/> Titik Temu COD (Ketemuan)</p>
+                                                <p className="text-sm font-bold text-slate-800 leading-relaxed">{trx.codMeetingPoint || 'Belum ditentukan oleh pembeli'}</p>
+                                            </div>
+
                                             {/* LOGIKA COD (KETEMUAN) */}
                                             {activeTab === 'pembelian' && trx.status === 'Dana Ditahan (Siap COD)' && (
                                                 <div className="mt-6 p-6 bg-[#00478F] rounded-2xl flex flex-col md:flex-row items-center justify-between text-white shadow-xl shadow-blue-900/10 gap-6 relative overflow-hidden mb-4">

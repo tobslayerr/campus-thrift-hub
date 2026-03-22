@@ -16,10 +16,11 @@ export default function Checkout() {
     const [selectedMethod, setSelectedMethod] = useState('');
     const [deliveryMethod, setDeliveryMethod] = useState('COD'); 
     
-    // STATE ALAMAT PENGIRIMAN
+    // STATE ALAMAT PENGIRIMAN & COD
     const [shippingAddress, setShippingAddress] = useState('');
     const [shippingPhone, setShippingPhone] = useState('');
     const [shippingLocationPoint, setShippingLocationPoint] = useState('');
+    const [codMeetingPoint, setCodMeetingPoint] = useState(''); // <--- STATE BARU TITIK TEMU
 
     const [proofImage, setProofImage] = useState(null);
     const [previewProof, setPreviewProof] = useState(null);
@@ -76,7 +77,12 @@ export default function Checkout() {
             if (!shippingAddress || !shippingPhone || !shippingLocationPoint) {
                 return toast.error('Harap lengkapi Alamat, Nomor Telepon, dan Titik Patokan!');
             }
+        } else if (deliveryMethod === 'COD') {
+            if (!codMeetingPoint) {
+                return toast.error('Harap isi Titik Temu COD secara spesifik!');
+            }
         }
+        
         if (!proofImage) return toast.error('Upload bukti transfer wajib diisi!');
 
         setSubmitting(true);
@@ -87,11 +93,13 @@ export default function Checkout() {
         formData.append('paymentMethod', selectedMethod);
         formData.append('deliveryMethod', deliveryMethod); 
         
-        // Kirim data alamat jika metode pengiriman dipilih
+        // Kirim data berdasarkan metode
         if (deliveryMethod === 'Pengiriman') {
             formData.append('buyerAddress', shippingAddress);
             formData.append('buyerPhone', shippingPhone);
             formData.append('buyerLocationPoint', shippingLocationPoint);
+        } else if (deliveryMethod === 'COD') {
+            formData.append('codMeetingPoint', codMeetingPoint);
         }
 
         formData.append('proofOfPayment', proofImage); 
@@ -195,7 +203,7 @@ export default function Checkout() {
                             </label>
                         </div>
 
-                        {/* FORM ALAMAT (Hanya tampil jika Ekspedisi dipilih) */}
+                        {/* FORM ALAMAT (Jika Ekspedisi dipilih) */}
                         {deliveryMethod === 'Pengiriman' && (
                             <div className="mb-10 p-5 bg-blue-50/50 rounded-2xl border border-blue-100 space-y-4 animate-in fade-in zoom-in duration-300">
                                 <div className="flex items-center gap-2 mb-2">
@@ -224,7 +232,33 @@ export default function Checkout() {
                                 </div>
                             </div>
                         )}
-                        {deliveryMethod === 'COD' && <div className="mb-10"></div>}
+
+                        {/* FORM TITIK TEMU (Jika COD dipilih) */}
+                        {deliveryMethod === 'COD' && (
+                            <div className="mb-10 p-5 bg-orange-50/50 rounded-2xl border border-orange-100 space-y-4 animate-in fade-in zoom-in duration-300">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <MapPin size={16} className="text-[#FF9500]"/>
+                                    <h4 className="font-black text-slate-800 text-sm uppercase tracking-widest">Lokasi Ketemuan</h4>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1 ml-1">Titik Temu COD Spesifik</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Contoh: Kantin Fakultas Teknik, Gedung Rektorat, dll." 
+                                        value={codMeetingPoint} 
+                                        onChange={(e) => setCodMeetingPoint(e.target.value)} 
+                                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:border-[#FF9500] outline-none" 
+                                        required 
+                                    />
+                                </div>
+                                <div className="mt-4 p-3 bg-white border border-orange-100 rounded-xl flex items-start gap-3 shadow-sm">
+                                    <AlertCircle size={16} className="text-[#FF9500] shrink-0 mt-0.5" />
+                                    <p className="text-xs font-medium text-slate-600 leading-relaxed">
+                                        <strong className="text-slate-800">Tips:</strong> Pastikan memilih titik temu di area kampus yang mudah dicari dan ramai. Anda bisa mengubah atau berdiskusi detail waktunya via Chat setelah pesanan dibuat.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* METODE PEMBAYARAN */}
                         <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
