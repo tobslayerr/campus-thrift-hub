@@ -11,7 +11,7 @@ const {
     getWishlist,
     checkWishlist, 
     getSellerAnalytics 
-} = require('../controllers/UserController');
+} = require('../controllers/userController');
 
 const { protect } = require('../middlewares/authMiddleware');
 const { upload } = require('../middlewares/upload');
