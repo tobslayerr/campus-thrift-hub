@@ -7,7 +7,8 @@ import useAdminAuthStore from '../../store/adminAuthStore';
 import toast from 'react-hot-toast';
 import { 
     Tags, LayoutDashboard, ArrowLeftRight, ShieldCheck, 
-    CreditCard, Users, Flag, ShieldBan, Menu, LogOut, X, AlertTriangle, RotateCcw
+    CreditCard, Users, Flag, ShieldBan, Menu, LogOut, X, 
+    AlertTriangle, RotateCcw, Filter, Search, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 // IMPORT KOMPONEN TAB YANG SUDAH DIPECAH
@@ -41,6 +42,16 @@ export default function Dashboard() {
     };
     const closeConfirm = () => setConfirmDialog({ ...confirmDialog, isOpen: false });
 
+    // ================= STATE FILTER KAMPUS & MODAL =================
+    const [adminCampusFilter, setAdminCampusFilter] = useState('Semua Kampus');
+    const [campuses, setCampuses] = useState([]);
+    
+    // State khusus untuk Modal Kampus
+    const [isCampusModalOpen, setIsCampusModalOpen] = useState(false);
+    const [campusSearch, setCampusSearch] = useState('');
+    const [campusPage, setCampusPage] = useState(1);
+    const campusesPerPage = 10;
+
     // ================= STATE DATA =================
     const [categories, setCategories] = useState([]);
     const [newCategory, setNewCategory] = useState('');
@@ -68,11 +79,24 @@ export default function Dashboard() {
     const [adminNotes, setAdminNotes] = useState('');
 
     // ================= FETCH DATA =================
+    const fetchCampuses = async () => {
+        try {
+            const res = await api.get('/products/campuses');
+            setCampuses(res.data.data || []);
+        } catch (error) {
+            console.error("Gagal memuat daftar kampus", error);
+        }
+    };
+
     const fetchCategories = async () => { try { const res = await api.get('/categories'); setCategories(res.data.data || []); } catch (e) { toast.error("Gagal memuat kategori"); } };
     const fetchTransactions = async () => { try { const res = await api.get('/transactions'); setTransactions(res.data.data || []); } catch (e) { toast.error("Gagal memuat transaksi"); } };
     const fetchPaymentMethods = async () => { try { const res = await api.get('/payment-methods'); setPaymentMethods(res.data.data || []); } catch (e) { toast.error("Gagal memuat rekening"); } };
     const fetchReports = async () => { try { const res = await api.get('/reports'); setReports(res.data.data || []); } catch (e) { toast.error("Gagal memuat laporan"); } };
     const fetchUsers = async () => { try { const res = await api.get('/users/admin/all'); setUsers(res.data.data || []); } catch (e) { toast.error("Gagal memuat pengguna"); setUsers([]); } };
+
+    useEffect(() => {
+        fetchCampuses(); // Load kampus sekali saat komponen mount
+    }, []);
 
     useEffect(() => {
         setLoading(true);
@@ -83,6 +107,28 @@ export default function Dashboard() {
         if (activeTab === 'laporan') fetchReports();
         setLoading(false);
     }, [activeTab]);
+
+    // ================= FILTERING LOGIC KAMPUS UTAMA =================
+    const filteredTransactions = transactions.filter(t => {
+        if (adminCampusFilter === 'Semua Kampus') return true;
+        return t.sellerId?.campus === adminCampusFilter || t.buyerId?.campus === adminCampusFilter;
+    });
+
+    const filteredUsers = users.filter(u => {
+        if (adminCampusFilter === 'Semua Kampus') return true;
+        return u.campus === adminCampusFilter;
+    });
+
+    const filteredReports = reports.filter(r => {
+        if (adminCampusFilter === 'Semua Kampus') return true;
+        return r.reportedUserId?.campus === adminCampusFilter || r.reporterId?.campus === adminCampusFilter;
+    });
+
+    // ================= PAGINATION LOGIC MODAL KAMPUS =================
+    const filteredCampusesModal = campuses.filter(c => c.toLowerCase().includes(campusSearch.toLowerCase()));
+    const totalCampusPages = Math.ceil(filteredCampusesModal.length / campusesPerPage);
+    const displayedCampuses = filteredCampusesModal.slice((campusPage - 1) * campusesPerPage, campusPage * campusesPerPage);
+
 
     // ================= HANDLERS =================
     const handleLogout = () => { 
@@ -95,7 +141,6 @@ export default function Dashboard() {
         }, 1500);
     };
     
-    // Handlers Transaksi
     const handleVerifyPayment = (id) => {
         openConfirm("Verifikasi Uang Masuk", "Apakah Anda yakin dana sudah masuk ke rekening sistem? Aksi ini akan mengubah status transaksi menjadi siap COD/Dikirim.", async () => {
             const toastId = toast.loading('Memverifikasi...');
@@ -115,7 +160,6 @@ export default function Dashboard() {
         });
     };
 
-    // Handlers Pengguna
     const handleBanUser = async (e) => {
         e.preventDefault();
         const toastId = toast.loading("Memblokir...");
@@ -131,7 +175,6 @@ export default function Dashboard() {
         });
     };
 
-    // Handlers Laporan
     const handleUpdateReport = async (e) => {
         e.preventDefault();
         const toastId = toast.loading("Menyimpan...");
@@ -139,7 +182,6 @@ export default function Dashboard() {
         catch (e) { toast.error("Gagal", { id: toastId }); }
     };
 
-    // Handlers Kategori
     const handleAddCategory = async (e) => {
         e.preventDefault();
         try { await api.post('/categories', { name: newCategory }); setNewCategory(''); fetchCategories(); toast.success('Kategori ditambah!'); } catch (e) { /* empty */ }
@@ -155,7 +197,6 @@ export default function Dashboard() {
         try { await api.put(`/categories/${id}`, { name: editName }); setEditingId(null); fetchCategories(); toast.success('Diubah!'); } catch (e) { /* empty */ }
     };
 
-    // Handlers Rekening Escrow
     const handleQrChange = (e) => { const f = e.target.files[0]; if(f) { setQrFile(f); setQrPreview(URL.createObjectURL(f)); } };
 
     const handleAddPaymentMethod = async (e) => {
@@ -200,9 +241,6 @@ export default function Dashboard() {
             <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-slate-900 text-white transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:flex lg:flex-col shadow-2xl`}>
                 <div className="flex items-center justify-between p-6 border-b border-slate-800">
                     <div className="flex items-center gap-4">
-                        {/* ================================== */}
-                        {/* MENGGANTI IKON DENGAN LOGO ICONWEB */}
-                        {/* ================================== */}
                         <img 
                             src="/iconweb.png" 
                             alt="Logo" 
@@ -218,7 +256,7 @@ export default function Dashboard() {
                         { id: 'transaksi', icon: ArrowLeftRight, label: 'Transaksi' },
                         { id: 'refund', icon: RotateCcw, label: 'Pengajuan Refund' }, 
                         { id: 'pengguna', icon: Users, label: 'Manajemen Pengguna' },
-                        { id: 'laporan', icon: Flag, label: 'Laporan' }, // <-- DIUBAH MENJADI "Laporan"
+                        { id: 'laporan', icon: Flag, label: 'Laporan' },
                         { id: 'rekening', icon: CreditCard, label: 'Rekening Escrow' },
                         { id: 'kategori', icon: Tags, label: 'Kategori Barang' },
                     ].map((item) => (
@@ -242,8 +280,22 @@ export default function Dashboard() {
                         <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 -ml-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200"><Menu size={24} /></button>
                         <h1 className="text-xl md:text-2xl font-black text-slate-800 capitalize tracking-tight flex items-center gap-2"><LayoutDashboard className="text-[#00478F] hidden md:block" size={24} /> {activeTab}</h1>
                     </div>
-                    <div className="hidden md:flex items-center gap-3 bg-slate-50 border border-slate-200 px-4 py-2 rounded-full">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Admin Online</span>
+                    
+                    <div className="flex items-center gap-4">
+                        {/* 🌟 FILTER KAMPUS HEADER (SEKARANG MENGGUNAKAN TOMBOL MODAL) 🌟 */}
+                        {['transaksi', 'refund', 'pengguna', 'laporan'].includes(activeTab) && (
+                            <button 
+                                onClick={() => setIsCampusModalOpen(true)}
+                                className="flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-700 text-xs md:text-sm rounded-full px-4 py-2 font-bold hover:border-[#00478F] transition-colors shadow-sm max-w-[150px] md:max-w-[200px]"
+                            >
+                                <Filter size={16} className="text-[#00478F] shrink-0" />
+                                <span className="truncate">{adminCampusFilter}</span>
+                            </button>
+                        )}
+
+                        <div className="hidden md:flex items-center gap-3 bg-slate-50 border border-slate-200 px-4 py-2 rounded-full">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div><span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Admin Online</span>
+                        </div>
                     </div>
                 </header>
 
@@ -252,10 +304,10 @@ export default function Dashboard() {
                         <div className="flex items-center justify-center h-full"><div className="w-10 h-10 border-4 border-[#00478F] border-t-transparent rounded-full animate-spin"></div></div>
                     ) : (
                         <div className="max-w-6xl mx-auto pb-20">
-                            {/* RENDER TAB BERDASARKAN STATE */}
+                            {/* RENDER TAB BERDASARKAN STATE DENGAN DATA YANG SUDAH DIFILTER */}
                             {activeTab === 'transaksi' && (
                                 <TabTransactions 
-                                    transactions={transactions} statusFilter={statusFilter} setStatusFilter={setStatusFilter} 
+                                    transactions={filteredTransactions} statusFilter={statusFilter} setStatusFilter={setStatusFilter} 
                                     currentPage={currentPage} setCurrentPage={setCurrentPage} itemsPerPage={itemsPerPage} 
                                     handleVerifyPayment={handleVerifyPayment} handleDisburseFunds={handleDisburseFunds} 
                                 />
@@ -263,7 +315,7 @@ export default function Dashboard() {
                             
                             {activeTab === 'refund' && (
                                 <TabRefunds 
-                                    transactions={transactions} statusFilter={statusFilter} setStatusFilter={setStatusFilter} 
+                                    transactions={filteredTransactions} statusFilter={statusFilter} setStatusFilter={setStatusFilter} 
                                     currentPage={currentPage} setCurrentPage={setCurrentPage} itemsPerPage={itemsPerPage} 
                                     fetchTransactions={fetchTransactions} 
                                 />
@@ -271,19 +323,20 @@ export default function Dashboard() {
                             
                             {activeTab === 'pengguna' && (
                                 <TabUsers 
-                                    users={users} currentPage={currentPage} setCurrentPage={setCurrentPage} itemsPerPage={itemsPerPage} 
+                                    users={filteredUsers} currentPage={currentPage} setCurrentPage={setCurrentPage} itemsPerPage={itemsPerPage} 
                                     handleUnban={handleUnban} setSelectedUser={setSelectedUser} setShowBanModal={setShowBanModal} 
                                 />
                             )}
                             
                             {activeTab === 'laporan' && (
                                 <TabReports 
-                                    reports={reports} currentPage={currentPage} setCurrentPage={setCurrentPage} itemsPerPage={itemsPerPage} 
+                                    reports={filteredReports} currentPage={currentPage} setCurrentPage={setCurrentPage} itemsPerPage={itemsPerPage} 
                                     setSelectedReport={setSelectedReport} setReportStatus={setReportStatus} setAdminNotes={setAdminNotes} 
                                     setShowReportModal={setShowReportModal} 
                                 />
                             )}
                             
+                            {/* Rekening dan Kategori tidak difilter berdasarkan kampus karena sifatnya global */}
                             {activeTab === 'rekening' && (
                                 <TabAccounts 
                                     paymentMethods={paymentMethods} paymentType={paymentType} setPaymentType={setPaymentType} 
@@ -305,6 +358,53 @@ export default function Dashboard() {
                     )}
                 </main>
             </div>
+
+            {/* ================= MODAL KAMPUS PAGINATION (FILTER ADMIN) ================= */}
+            {isCampusModalOpen && (
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 border border-slate-100">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-slate-900">Filter Kampus</h2>
+                            <button onClick={() => setIsCampusModalOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-red-100 hover:text-red-500 transition-colors"><X size={20}/></button>
+                        </div>
+                        
+                        <div className="relative mb-4">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input type="text" placeholder="Cari nama kampus..." value={campusSearch} onChange={(e) => {setCampusSearch(e.target.value); setCampusPage(1);}} className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-[#00478F]" />
+                        </div>
+
+                        <div className="space-y-2 mb-6 min-h-[300px]">
+                            <button 
+                                onClick={() => { setAdminCampusFilter('Semua Kampus'); setIsCampusModalOpen(false); setCurrentPage(1); }}
+                                className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition-colors border ${adminCampusFilter === 'Semua Kampus' ? 'bg-[#00478F] text-white border-[#00478F] shadow-md' : 'bg-slate-50 text-slate-700 border-transparent hover:bg-slate-100'}`}
+                            >
+                                🌍 Semua Kampus
+                            </button>
+                            {displayedCampuses.map(campus => (
+                                <button 
+                                    key={campus} 
+                                    onClick={() => { setAdminCampusFilter(campus); setIsCampusModalOpen(false); setCurrentPage(1); }}
+                                    className={`w-full text-left px-4 py-3 rounded-xl font-bold text-sm transition-colors border ${adminCampusFilter === campus ? 'bg-[#00478F] text-white border-[#00478F] shadow-md' : 'bg-white border-slate-200 text-slate-700 hover:border-[#00478F]'}`}
+                                >
+                                    {campus}
+                                </button>
+                            ))}
+                            {displayedCampuses.length === 0 && <p className="text-center text-slate-400 font-bold mt-10">Kampus tidak ditemukan.</p>}
+                        </div>
+
+                        {/* Pagination Kampus */}
+                        {totalCampusPages > 1 && (
+                            <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Hal {campusPage} / {totalCampusPages}</span>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setCampusPage(p => Math.max(1, p - 1))} disabled={campusPage === 1} className="p-2 bg-slate-100 border border-slate-200 rounded-lg disabled:opacity-50 hover:bg-slate-200"><ChevronLeft size={18}/></button>
+                                    <button onClick={() => setCampusPage(p => Math.min(totalCampusPages, p + 1))} disabled={campusPage === totalCampusPages} className="p-2 bg-slate-100 border border-slate-200 rounded-lg disabled:opacity-50 hover:bg-slate-200"><ChevronRight size={18}/></button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* MODAL BAN USER */}
             {showBanModal && selectedUser && (
