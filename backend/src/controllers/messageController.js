@@ -1,8 +1,8 @@
 const Message = require('../models/Message');
-const Notification = require('../models/Notification'); // 🔔 IMPORT NOTIFIKASI
-const User = require('../models/User'); // Untuk mengambil nama pengirim
+const Notification = require('../models/Notification');
+const User = require('../models/User');
 const mongoose = require('mongoose');
-const sendEmail = require('../utils/sendEmail'); // 📧 IMPORT SEND EMAIL
+const sendEmail = require('../utils/sendEmail');
 
 // In-memory cache ringan untuk melacak siapa yang sedang mengetik
 const typingCache = new Map(); 
@@ -12,20 +12,16 @@ exports.sendMessage = async (req, res) => {
         const { receiverId, message, productId, text } = req.body;
         const senderId = req.user.id;
 
-        // Ambil isi pesan dari 'text' (prioritas) atau 'message' dari body
         const content = text || message;
 
-        // 1. Validasi Input Dasar
         if (!receiverId || !content) {
             return res.status(400).json({ message: 'Penerima dan isi pesan wajib diisi' });
         }
 
-        // 2. Validasi format ID
         if (!mongoose.Types.ObjectId.isValid(receiverId)) {
             return res.status(400).json({ message: 'Format ID Penerima tidak valid' });
         }
 
-        // 3. Siapkan data pesan sesuai Model (menggunakan field 'text')
         const messageData = {
             senderId,
             receiverId,
@@ -37,15 +33,12 @@ exports.sendMessage = async (req, res) => {
             messageData.productId = productId;
         }
 
-        // 4. Simpan ke Database
         const newMessage = await Message.create(messageData);
 
-        // 5. Ambil data lengkap untuk Socket & Response
         const populatedMessage = await Message.findById(newMessage._id)
             .populate('senderId', 'name profilePicture isVerified campus')
             .populate('productId', 'title imageUrl price');
 
-        // 6. Logika Socket.io (Realtime)
         const io = req.app.get('io');
         const userSockets = req.app.get('userSockets');
 
@@ -56,39 +49,31 @@ exports.sendMessage = async (req, res) => {
             }
         }
 
-        // =========================================================================
-        // 🌟 7. LOGIKA NOTIFIKASI & EMAIL (DENGAN ANTI-SPAM COOLDOWN 5 MENIT) 🌟
-        // =========================================================================
         const receiver = await User.findById(receiverId);
         
         if (receiver) {
-            // Cek kapan terakhir kali pengirim ini mengirim pesan ke penerima ini
             const lastMessage = await Message.findOne({
                 senderId: senderId,
                 receiverId: receiverId,
-                _id: { $ne: newMessage._id } // Selain pesan yang baru saja dibuat
+                _id: { $ne: newMessage._id }
             }).sort({ createdAt: -1 });
 
-            // Batas waktu cooldown (5 Menit)
             const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
             
-            // Kirim notifikasi HANYA JIKA ini pesan pertama, ATAU pesan sebelumnya dikirim > 5 menit yang lalu
             let shouldSendNotification = true;
             if (lastMessage && lastMessage.createdAt > fiveMinutesAgo) {
                 shouldSendNotification = false; 
             }
 
             if (shouldSendNotification) {
-                // A. Buat Notifikasi In-App (Di Tab Notifikasi)
                 const shortContent = content.length > 40 ? content.substring(0, 40) + '...' : content;
                 await Notification.create({
                     userId: receiverId,
                     title: `Pesan Baru dari ${populatedMessage.senderId.name} 💬`,
                     message: `"${shortContent}"`,
-                    type: 'SYSTEM' // <--- PERBAIKAN: Menggunakan enum valid 'SYSTEM' bukan 'INFO'
+                    type: 'SYSTEM'
                 });
 
-                // B. Kirim Notifikasi ke Email
                 if (receiver.email) {
                     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
                     const emailHtml = `
@@ -104,12 +89,9 @@ exports.sendMessage = async (req, res) => {
                             <p style="color: #334155; font-size: 14px; margin-bottom: 24px;">Silakan login ke aplikasi untuk membalas pesan ini agar transaksi berjalan lancar.</p>
                             
                             <a href="${frontendUrl}/chat/${senderId}" style="display: inline-block; background-color: #00478F; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 12px; font-weight: bold; font-size: 14px;">Balas Pesan Sekarang</a>
-                            
-                            <p style="color: #94a3b8; font-size: 12px; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 16px;">Email ini dikirim secara otomatis oleh sistem Campus Thrift Hub.</p>
                         </div>
                     `;
 
-                    // Kirim secara asynchronous agar tidak memblokir respon ke pengirim
                     sendEmail({
                         email: receiver.email,
                         subject: `Pesan Baru dari ${populatedMessage.senderId.name} - Campus Thrift Hub`,
@@ -131,20 +113,16 @@ exports.sendMessage = async (req, res) => {
     }
 };
 
-// @desc    Ambil Riwayat Chat dengan User Tertentu
 exports.getMessages = async (req, res) => {
     try {
         const { receiverId } = req.params; 
         const myId = req.user.id;
 
-        // 1. UPDATE ISREAD: Tandai semua pesan yang dikirim oleh 
-        //    lawan bicara kepadaku menjadi "SUDAH DIBACA"
         await Message.updateMany(
             { senderId: receiverId, receiverId: myId, isRead: false },
             { $set: { isRead: true } }
         );
 
-        // 2. Ambil riwayat percakapan
         const messages = await Message.find({
             $or: [
                 { senderId: myId, receiverId: receiverId },
@@ -154,29 +132,23 @@ exports.getMessages = async (req, res) => {
         .populate('productId', 'title price images imageUrl')
         .sort({ createdAt: 1 });
 
-        // 3. Cek apakah lawan bicara sedang mengetik untukku
         let isTyping = false;
         const typingData = typingCache.get(receiverId.toString());
-        // Jika data typing ada, tujuannya untukku, dan belum expired (di bawah 3 detik)
         if (typingData && typingData.targetId === myId.toString() && typingData.expiresAt > Date.now()) {
             isTyping = true;
         }
 
-        // Kirimkan data pesan beserta status mengetik lawan
         res.status(200).json({ success: true, data: messages, isTyping });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
-// @desc    Set Status Sedang Mengetik
-// @route   POST /api/messages/typing
 exports.setTypingStatus = (req, res) => {
     const { receiverId, isTyping } = req.body;
     const myId = req.user.id.toString();
 
     if (isTyping) {
-        // Set expired 3 detik dari sekarang (kalau user berhenti ngetik otomatis hilang)
         typingCache.set(myId, { targetId: receiverId.toString(), expiresAt: Date.now() + 3000 });
     } else {
         typingCache.delete(myId);
@@ -185,50 +157,79 @@ exports.setTypingStatus = (req, res) => {
     res.status(200).json({ success: true });
 };
 
-// @desc    Ambil Daftar Semua Obrolan (Inbox)
+// @desc    Ambil Daftar Semua Obrolan (Inbox) & Kelompokkan berdasarkan Role
 exports.getConversations = async (req, res) => {
     try {
         const myId = req.user.id;
+        
+        // Ambil pesan urut dari yang paling lama untuk melacak produk dan firstSender
         const messages = await Message.find({
             $or: [{ senderId: myId }, { receiverId: myId }]
-        }).populate('senderId receiverId', 'name profilePicture isVerified isBanned'); 
+        })
+        .populate('senderId receiverId', 'name profilePicture isVerified isBanned')
+        .populate({
+            path: 'productId',
+            select: 'title images imageUrl sellerId seller user price' // Mengambil kemungkinan field kepemilikan
+        })
+        .sort({ createdAt: 1 }); 
 
         const conversations = new Map();
 
         messages.forEach(msg => {
-            // Tentukan siapa lawan bicara di percakapan ini
             const isMeSender = msg.senderId._id.toString() === myId.toString();
             const otherUser = isMeSender ? msg.receiverId : msg.senderId;
             const otherUserId = otherUser._id.toString();
 
-            // Pesan hanya dianggap "belum dibaca" JIKA penerimanya adalah SAYA, dan status pesannya false.
             const isUnreadForMe = (msg.receiverId._id.toString() === myId.toString() && msg.isRead === false);
-            const isReadStatusForMe = !isUnreadForMe;
 
             if (!conversations.has(otherUserId)) {
                 conversations.set(otherUserId, {
                     user: otherUser,
                     lastMessage: msg.text,
-                    isRead: isReadStatusForMe, 
+                    isRead: !isUnreadForMe, 
                     senderId: msg.senderId._id,
-                    updatedAt: msg.createdAt
+                    updatedAt: msg.createdAt,
+                    product: msg.productId || null,
+                    firstSenderId: msg.senderId._id.toString()
                 });
             } else {
                 const existing = conversations.get(otherUserId);
-                // Hanya timpa jika pesan ini lebih baru dari yang sudah tersimpan di map
+                // Selalu perbarui dengan pesan terbaru
                 if (new Date(msg.createdAt) > new Date(existing.updatedAt)) {
-                    conversations.set(otherUserId, {
-                        user: otherUser,
-                        lastMessage: msg.text,
-                        isRead: isReadStatusForMe, 
-                        senderId: msg.senderId._id,
-                        updatedAt: msg.createdAt
-                    });
+                    existing.lastMessage = msg.text;
+                    existing.senderId = msg.senderId._id;
+                    existing.updatedAt = msg.createdAt;
+                }
+                // Jika ada 1 saja pesan unread buat saya, tandai false
+                if (isUnreadForMe) {
+                    existing.isRead = false;
+                }
+                // Update produk jika pesan membawa info produk
+                if (msg.productId) {
+                    existing.product = msg.productId;
                 }
             }
         });
 
-       const chatList = Array.from(conversations.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+       const chatList = Array.from(conversations.values()).map(conv => {
+            let role = 'buyer'; // Default kita sebagai pembeli
+
+            if (conv.product) {
+                // Cek siapa pemilik produk (menyesuaikan skema db kamu: sellerId, seller, atau user)
+                const ownerId = conv.product.sellerId || conv.product.seller || conv.product.user;
+                if (ownerId && ownerId.toString() === myId.toString()) {
+                    role = 'seller'; // Kita yang jual barangnya
+                }
+            } else {
+                // Kalau gak ada produk, tebak dari siapa yang dichat duluan
+                if (conv.firstSenderId !== myId.toString()) {
+                    role = 'seller'; 
+                }
+            }
+
+            return { ...conv, role };
+       }).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
         res.status(200).json({ success: true, data: chatList });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

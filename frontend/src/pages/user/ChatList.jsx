@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
-import { MessageSquare, ChevronRight, Clock, ShieldAlert } from 'lucide-react';
+import { MessageSquare, ChevronRight, ShieldAlert, ShoppingBag, Store, Tag } from 'lucide-react';
 
 export default function ChatList() {
     const [conversations, setConversations] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('buyer'); // 'buyer' | 'seller'
 
     useEffect(() => {
         const fetchConversations = async () => {
@@ -27,41 +28,70 @@ export default function ChatList() {
         </div>
     );
 
+    const filteredConversations = conversations.filter(conv => conv.role === activeTab);
+
     return (
         <div className="min-h-screen bg-[#F8FAFC] pb-32">
             <div className="max-w-4xl mx-auto p-4 md:p-8 pt-10">
                 
                 {/* --- HEADER --- */}
-                <div className="mb-10">
+                <div className="mb-8">
                     <h1 className="text-3xl md:text-4xl font-black text-slate-900 mb-2 flex items-center gap-4 tracking-tight">
                         <div className="w-14 h-14 bg-[#00478F]/10 rounded-2xl flex items-center justify-center text-[#00478F]">
                             <MessageSquare size={28} strokeWidth={2.5} />
                         </div>
                         Kotak Masuk
                     </h1>
-                    <p className="text-slate-500 font-medium ml-0 md:ml-[4.5rem]">Pesan dan negosiasi Anda dengan pengguna lain.</p>
+                    <p className="text-slate-500 font-medium ml-0 md:ml-[4.5rem]">Pantau negosiasi pembelian dan penjualan Anda.</p>
                 </div>
 
                 {/* --- LIST CONTAINER --- */}
                 <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                     
-                    {conversations.length === 0 ? (
+                    {/* TABS (OLX STYLE) */}
+                    <div className="flex border-b border-slate-100 bg-white">
+                        <button 
+                            onClick={() => setActiveTab('buyer')}
+                            className={`flex-1 py-4 text-center font-bold text-sm md:text-base border-b-2 transition-all flex items-center justify-center gap-2 ${activeTab === 'buyer' ? 'border-[#00478F] text-[#00478F] bg-blue-50/30' : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                        >
+                            <ShoppingBag size={20} className={activeTab === 'buyer' ? 'text-[#FF9500]' : ''} />
+                            Sebagai Pembeli
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('seller')}
+                            className={`flex-1 py-4 text-center font-bold text-sm md:text-base border-b-2 transition-all flex items-center justify-center gap-2 ${activeTab === 'seller' ? 'border-[#00478F] text-[#00478F] bg-blue-50/30' : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                        >
+                            <Store size={20} className={activeTab === 'seller' ? 'text-[#FF9500]' : ''} />
+                            Sebagai Penjual
+                        </button>
+                    </div>
+
+                    {filteredConversations.length === 0 ? (
                         <div className="p-16 text-center flex flex-col items-center">
                             <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-                                <MessageSquare size={40} className="text-slate-300" />
+                                {activeTab === 'buyer' ? <ShoppingBag size={40} className="text-slate-300" /> : <Store size={40} className="text-slate-300" />}
                             </div>
-                            <h3 className="text-xl font-black text-slate-800 mb-2">Belum ada obrolan</h3>
-                            <p className="text-slate-400 font-medium">Mulai cari barang dan hubungi penjual untuk bernegosiasi.</p>
-                            <Link to="/" className="mt-8 px-8 py-3 bg-[#00478F] text-white font-black rounded-xl hover:bg-[#FF9500] transition-colors shadow-lg shadow-blue-900/20 active:scale-95">
-                                Eksplorasi Barang
-                            </Link>
+                            <h3 className="text-xl font-black text-slate-800 mb-2">
+                                {activeTab === 'buyer' ? 'Belum ada obrolan pembelian' : 'Belum ada pesan dari pembeli'}
+                            </h3>
+                            <p className="text-slate-400 font-medium max-w-sm">
+                                {activeTab === 'buyer' 
+                                    ? 'Mulai cari barang menarik dan hubungi penjual untuk bernegosiasi.' 
+                                    : 'Pesanan dan pertanyaan dari calon pembeli produkmu akan muncul di sini.'}
+                            </p>
+                            {activeTab === 'buyer' && (
+                                <Link to="/" className="mt-8 px-8 py-3 bg-[#00478F] text-white font-black rounded-xl hover:bg-[#FF9500] transition-colors shadow-lg shadow-blue-900/20 active:scale-95">
+                                    Mulai Belanja
+                                </Link>
+                            )}
                         </div>
                     ) : (
                         <div className="divide-y divide-slate-50">
-                            {conversations.map((conv, index) => {
+                            {filteredConversations.map((conv, index) => {
                                 const opponent = conv.user || {};
                                 const isUnread = !conv.isRead;
                                 const isBanned = opponent.isBanned;
+                                const product = conv.product;
                                 
                                 // Format Waktu
                                 const dateObj = new Date(conv.updatedAt);
@@ -104,8 +134,16 @@ export default function ChatList() {
                                                     {dateString} <span className="text-[10px] text-slate-300">•</span> {timeString}
                                                 </span>
                                             </div>
+                                            
+                                            {/* Indikator Produk seperti di OLX */}
+                                            {product && (
+                                                <p className="text-xs font-bold text-[#00478F] mb-1 truncate flex items-center gap-1.5">
+                                                    <Tag size={12}/> {product.title}
+                                                </p>
+                                            )}
+
                                             <p className={`text-sm truncate transition-colors ${isUnread ? 'font-black text-slate-800' : 'font-medium text-slate-500 group-hover:text-slate-700'}`}>
-                                                {conv.lastMessage || 'Mengirim lampiran...'}
+                                                {conv.lastMessage || 'Mengirim pesan...'}
                                             </p>
                                         </div>
 
