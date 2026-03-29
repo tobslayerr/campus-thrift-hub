@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import api from '../api/axios';
 import { 
@@ -10,14 +10,14 @@ import {
 export default function Navbar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation(); // Untuk melacak posisi URL saat ini
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [isLoggingOut, setIsLoggingOut] = useState(false); // STATE LOADING LOGOUT
+  const [isLoggingOut, setIsLoggingOut] = useState(false); 
   
   const userId = user?.id || user?._id;
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
-  // LOGIKA POLLING NOTIFIKASI
   useEffect(() => {
       if (user) {
           const fetchUnreadNotifs = async () => {
@@ -33,15 +33,13 @@ export default function Navbar() {
       }
   }, [user]);
 
-  // HANDLER LOGOUT DENGAN LOADING EFFECT
   const handleLogout = async () => {
-    setIsLoggingOut(true); // Mulai loading
-    setIsSidebarOpen(false); // Tutup sidebar jika sedang di mobile
+    setIsLoggingOut(true); 
+    setIsSidebarOpen(false); 
     
-    // Memberikan delay sedikit (800ms) agar user bisa melihat effect loading
     setTimeout(async () => {
       await logout();
-      setIsLoggingOut(false); // Matikan loading
+      setIsLoggingOut(false); 
       navigate('/login');
     }, 800);
   };
@@ -53,9 +51,13 @@ export default function Navbar() {
       : 'text-slate-600 hover:text-[#00478F] hover:bg-slate-100'}
   `;
 
+  // LOGIKA TOMBOL MENGAMBANG (FAB): Sembunyikan di halaman tertentu
+  const hideFabPaths = ['/upload', '/login', '/register', '/chats'];
+  const isChatRoom = location.pathname.startsWith('/chat/');
+  const shouldShowFab = user && !hideFabPaths.includes(location.pathname) && !isChatRoom;
+
   return (
     <>
-      {/* --- OVERLAY LOADING LOGOUT --- */}
       {isLoggingOut && (
         <div className="fixed inset-0 bg-white/60 backdrop-blur-md z-[9999] flex flex-col items-center justify-center animate-in fade-in duration-300">
           <Loader2 className="w-12 h-12 text-[#00478F] animate-spin mb-4" />
@@ -82,12 +84,10 @@ export default function Navbar() {
                   <MessageSquare size={18} /><span>Pesan</span>
                 </NavLink>
 
-                {/* 🌟 TOMBOL ANALITIK (DESKTOP) */}
                 <NavLink to="/seller/dashboard" className={navItemStyle} title="Analitik Toko">
                   <BarChart2 size={18} className="group-hover:text-[#FF9500] transition-colors" /><span>Analitik</span>
                 </NavLink>
 
-                {/* 🌟 TOMBOL WISHLIST (DESKTOP) */}
                 <NavLink to="/wishlist" className={navItemStyle} title="Barang Tersimpan">
                   <Heart size={18} className="group-hover:text-red-500 transition-colors" /><span>Wishlist</span>
                 </NavLink>
@@ -133,19 +133,25 @@ export default function Navbar() {
             )}
           </div>
 
-          <div className="md:hidden flex items-center gap-3">
+          <div className="md:hidden flex items-center gap-2">
               {user && (
-                  <Link to="/notifications" className="relative p-2 text-[#00478F] bg-slate-100 rounded-2xl active:scale-90 transition-transform">
-                      <Bell size={24} />
-                      {unreadCount > 0 && (
-                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center animate-bounce shadow-sm border-2 border-white">
-                              {unreadCount > 9 ? '9+' : unreadCount}
-                          </span>
-                      )}
-                  </Link>
+                  <>
+                      <Link to="/chats" className="p-2.5 text-[#00478F] bg-slate-100 rounded-2xl active:scale-90 transition-transform">
+                          <MessageSquare size={22} />
+                      </Link>
+                      
+                      <Link to="/notifications" className="relative p-2.5 text-[#00478F] bg-slate-100 rounded-2xl active:scale-90 transition-transform">
+                          <Bell size={22} />
+                          {unreadCount > 0 && (
+                              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center animate-bounce shadow-sm border-2 border-white">
+                                  {unreadCount > 9 ? '9+' : unreadCount}
+                              </span>
+                          )}
+                      </Link>
+                  </>
               )}
-              <button onClick={toggleSidebar} className="p-3 rounded-2xl bg-slate-100 text-[#00478F] active:scale-90 transition-transform">
-                {isSidebarOpen ? <X size={26} /> : <Menu size={26} />}
+              <button onClick={toggleSidebar} className="p-2.5 rounded-2xl bg-slate-100 text-[#00478F] active:scale-90 transition-transform ml-1">
+                {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
               </button>
           </div>
         </div>
@@ -170,23 +176,13 @@ export default function Navbar() {
 
               <NavLink to="/transactions" onClick={toggleSidebar} className={navItemStyle}><ClipboardList size={22} /> <span>Riwayat Transaksi</span></NavLink>
               
-              {/* 🌟 TOMBOL ANALITIK (MOBILE) */}
               <NavLink to="/seller/dashboard" onClick={toggleSidebar} className={navItemStyle}>
                 <BarChart2 size={22} /> <span>Analitik Toko (Dashboard)</span>
               </NavLink>
-
-              <NavLink to="/chats" onClick={toggleSidebar} className={navItemStyle}><MessageSquare size={22} /> <span>Pesan Chat</span></NavLink>
               
-              {/* 🌟 TOMBOL WISHLIST (MOBILE) */}
               <NavLink to="/wishlist" onClick={toggleSidebar} className={navItemStyle}>
                   <Heart size={22} className="group-hover:text-red-500 transition-colors" /> 
                   <span>Barang Tersimpan</span>
-              </NavLink>
-
-              <NavLink to="/notifications" onClick={toggleSidebar} className={navItemStyle}>
-                  <Bell size={22} /> 
-                  <span>Notifikasi</span>
-                  {unreadCount > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{unreadCount}</span>}
               </NavLink>
 
               <NavLink to="/upload" onClick={toggleSidebar} className="flex items-center justify-center gap-3 px-6 py-4 mt-2 bg-[#FF9500] text-white font-black rounded-2xl shadow-lg shadow-orange-200">
@@ -214,6 +210,19 @@ export default function Navbar() {
           )}
         </div>
       </aside>
+
+      {/* ======================================================= */}
+      {/* FLOATING ACTION BUTTON (HANYA MUNCUL DI MOBILE)           */}
+      {/* ======================================================= */}
+      {shouldShowFab && (
+          <Link 
+              to="/upload" 
+              className="md:hidden fixed bottom-6 right-6 z-[90] bg-[#FF9500] text-white w-14 h-14 rounded-full shadow-[0_10px_25px_-5px_rgba(255,149,0,0.5)] flex items-center justify-center border-4 border-white hover:scale-105 active:scale-90 transition-all duration-300"
+              title="Jual Barang Sekarang"
+          >
+              <PlusCircle size={26} className="shrink-0" />
+          </Link>
+      )}
     </>
   );
 }

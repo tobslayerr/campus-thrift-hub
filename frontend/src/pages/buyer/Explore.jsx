@@ -1,15 +1,19 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable no-unused-vars */
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../api/axios';
-import { Search, Filter, X, PackageSearch, MapPin, School, Building, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { Search, Filter, X, PackageSearch, MapPin, School, Building, ChevronLeft, ChevronRight, Check, Star } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
 
 export default function Explore() {
     const [searchParams, setSearchParams] = useSearchParams();
+    
     const initialSearch = searchParams.get('search') || '';
     const initialCampus = searchParams.get('campus') || ''; 
     const initialRating = searchParams.get('minRating') || '0';
+    const initialCategoryName = searchParams.get('category') || '';
+    const initialSort = searchParams.get('sort') || 'newest';
     
     const { user } = useAuthStore(); 
 
@@ -17,33 +21,25 @@ export default function Explore() {
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // Filter States
     const [searchTerm, setSearchTerm] = useState(initialSearch);
     const [selectedCategory, setSelectedCategory] = useState('');
     const [priceRange, setPriceRange] = useState({ min: '', max: '' });
-    const [sortBy, setSortBy] = useState('newest');
+    const [sortBy, setSortBy] = useState(initialSort);
     const [campusFilter, setCampusFilter] = useState(initialCampus ? initialCampus : 'Semua Kampus');
     const [ratingFilter, setRatingFilter] = useState(initialRating);
     
     const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
-    // Modal Kampus State
     const [isCampusModalOpen, setIsCampusModalOpen] = useState(false);
     const [campuses, setCampuses] = useState([]);
     const [campusPage, setCampusPage] = useState(1);
     const [campusSearch, setCampusSearch] = useState('');
     const campusesPerPage = 10;
 
-    // Mengunci scroll body saat Filter Mobile terbuka
     useEffect(() => {
-        if (isMobileFilterOpen) {
-            document.body.style.overflow = 'hidden';
-        } else {
-            document.body.style.overflow = 'auto';
-        }
-        return () => {
-            document.body.style.overflow = 'auto';
-        };
+        if (isMobileFilterOpen) document.body.style.overflow = 'hidden';
+        else document.body.style.overflow = 'auto';
+        return () => document.body.style.overflow = 'auto';
     }, [isMobileFilterOpen]);
 
     useEffect(() => {
@@ -51,15 +47,32 @@ export default function Explore() {
         fetchCampuses();
     }, []);
 
+    // FETCH PRODUK TRIGGER
     useEffect(() => {
+        // MENCEGAH RACE CONDITION: Jangan fetch barang jika URL punya kategori tapi data ID kategori belum diset
+        if (initialCategoryName && !selectedCategory && categories.length === 0) {
+            return;
+        }
         fetchProducts();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchTerm, selectedCategory, priceRange, sortBy, campusFilter, ratingFilter]);
+    }, [searchTerm, selectedCategory, priceRange, sortBy, campusFilter, ratingFilter, categories.length]);
 
     const fetchCategories = async () => {
         try {
             const res = await api.get('/categories');
-            setCategories(res.data.data);
+            const fetchedCategories = res.data.data;
+            setCategories(fetchedCategories);
+
+            // LOGIKA PENCARIAN NAMA KATEGORI KE ID (CASE INSENSITIVE)
+            if (initialCategoryName) {
+                const matchedCategory = fetchedCategories.find(
+                    cat => cat.name.trim().toLowerCase() === initialCategoryName.trim().toLowerCase()
+                );
+                if (matchedCategory) {
+                    setSelectedCategory(matchedCategory._id);
+                } else {
+                    setSelectedCategory(''); // Reset jika kategori tak ditemukan
+                }
+            }
         } catch (error) { console.error(error); }
     };
 
@@ -78,7 +91,8 @@ export default function Explore() {
             if (selectedCategory) query += `&category=${selectedCategory}`;
             if (priceRange.min) query += `&minPrice=${priceRange.min}`;
             if (priceRange.max) query += `&maxPrice=${priceRange.max}`;
-            if (sortBy) query += `&sort=${sortBy}`;
+            
+            if (sortBy && sortBy !== 'rating_desc') query += `&sort=${sortBy}`;
             
             if (campusFilter && campusFilter !== 'Semua Kampus') {
                 query += `&campus=${encodeURIComponent(campusFilter)}`;
@@ -87,12 +101,19 @@ export default function Explore() {
             const res = await api.get(query);
             let fetchedProducts = res.data.data;
 
-            // Filter Rating Manual di Frontend
             if (ratingFilter !== '0') {
                 const minRatingNum = parseFloat(ratingFilter);
                 fetchedProducts = fetchedProducts.filter(p => {
                     const sellerRating = p.sellerId?.rating || 0;
                     return sellerRating >= minRatingNum;
+                });
+            }
+
+            if (sortBy === 'rating_desc') {
+                fetchedProducts.sort((a, b) => {
+                    const ratingA = a.sellerId?.rating || 0;
+                    const ratingB = b.sellerId?.rating || 0;
+                    return ratingB - ratingA;
                 });
             }
 
@@ -106,11 +127,8 @@ export default function Explore() {
 
     const toggleMyCampus = () => {
         if (!user) return;
-        if (campusFilter === user.campus) {
-            setCampusFilter('Semua Kampus'); 
-        } else {
-            setCampusFilter(user.campus); 
-        }
+        if (campusFilter === user.campus) setCampusFilter('Semua Kampus'); 
+        else setCampusFilter(user.campus); 
     };
 
     const filteredCampuses = campuses.filter(c => c.toLowerCase().includes(campusSearch.toLowerCase()));
@@ -121,15 +139,12 @@ export default function Explore() {
         <div className="bg-slate-50 min-h-screen pb-32 pt-24 px-4 md:px-8 relative">
             <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-8">
                 
-                {/* TOMBOL FILTER MOBILE */}
                 <button onClick={() => setIsMobileFilterOpen(true)} className="md:hidden w-full bg-white p-4 rounded-2xl border border-slate-200 font-black text-slate-700 flex justify-center items-center gap-2 shadow-sm active:scale-95 transition-transform">
                     <Filter size={18} /> Buka Filter Pencarian
                 </button>
 
-                {/* SIDEBAR FILTER (Dengan z-[999] agar berada di atas Navbar dan Footer) */}
                 <aside className={`fixed inset-0 z-[999] bg-white md:bg-transparent md:static md:w-72 md:block md:z-0 flex flex-col transition-transform duration-300 ${isMobileFilterOpen ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}`}>
                     
-                    {/* HEADER MOBILE (Hanya tampil di HP) */}
                     <div className="flex justify-between items-center md:hidden p-5 border-b border-slate-100 bg-white shrink-0 shadow-sm z-10">
                         <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><Filter size={20} className="text-[#00478F]"/> Filter</h2>
                         <button onClick={() => setIsMobileFilterOpen(false)} className="p-2 bg-slate-100 text-slate-500 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors">
@@ -137,14 +152,11 @@ export default function Explore() {
                         </button>
                     </div>
 
-                    {/* KONTEN FILTER (Scrollable) */}
                     <div className="flex-1 overflow-y-auto p-5 md:p-0 bg-slate-50 md:bg-transparent relative">
                         <div className="bg-white md:p-6 md:rounded-[2rem] md:border md:border-slate-100 md:shadow-sm space-y-8 rounded-3xl p-5 border border-slate-100 shadow-sm">
                             
-                            {/* FILTER KAMPUS EKSKLUSIF */}
                             <div>
                                 <h3 className="font-black text-slate-800 mb-4 flex items-center gap-2"><School size={16} className="text-[#00478F]"/> Lokasi Kampus</h3>
-                                
                                 {user && user.campus && (
                                     <button 
                                         onClick={toggleMyCampus}
@@ -154,7 +166,6 @@ export default function Explore() {
                                         {campusFilter === user.campus && <Check size={14} />}
                                     </button>
                                 )}
-                                
                                 <button type="button" onClick={() => setIsCampusModalOpen(true)} className="w-full flex items-center justify-between bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 hover:bg-blue-50 transition-colors">
                                     <div className="flex items-center gap-2 overflow-hidden">
                                         <Building size={16} className="text-[#FF9500] shrink-0" />
@@ -163,24 +174,22 @@ export default function Explore() {
                                 </button>
                             </div>
 
-                            {/* FILTER KATEGORI */}
                             <div>
                                 <h3 className="font-black text-slate-800 mb-4">Kategori</h3>
                                 <div className="space-y-3">
                                     <label className="flex items-center gap-3 cursor-pointer group">
-                                        <input type="radio" name="category" checked={selectedCategory === ''} onChange={() => setSelectedCategory('')} className="w-4 h-4 accent-[#00478F]" />
+                                        <input type="radio" name="category" checked={selectedCategory === ''} onChange={() => { setSelectedCategory(''); setSearchParams(prev => { prev.delete('category'); return prev; }); }} className="w-4 h-4 accent-[#00478F]" />
                                         <span className="font-medium text-slate-600 group-hover:text-[#00478F] transition-colors">Semua Kategori</span>
                                     </label>
                                     {categories.map(cat => (
                                         <label key={cat._id} className="flex items-center gap-3 cursor-pointer group">
-                                            <input type="radio" name="category" checked={selectedCategory === cat._id} onChange={() => setSelectedCategory(cat._id)} className="w-4 h-4 accent-[#00478F]" />
+                                            <input type="radio" name="category" checked={selectedCategory === cat._id} onChange={() => { setSelectedCategory(cat._id); setSearchParams(prev => { prev.set('category', cat.name); return prev; }); }} className="w-4 h-4 accent-[#00478F]" />
                                             <span className="font-medium text-slate-600 group-hover:text-[#00478F] transition-colors">{cat.name}</span>
                                         </label>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* URUTKAN */}
                             <div>
                                 <h3 className="font-black text-slate-800 mb-4">Urutkan</h3>
                                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-[#00478F] cursor-pointer appearance-none">
@@ -188,10 +197,10 @@ export default function Explore() {
                                     <option value="lowest">Harga Terendah</option>
                                     <option value="highest">Harga Tertinggi</option>
                                     <option value="popular">Paling Populer</option>
+                                    <option value="rating_desc">Rating Toko Tertinggi</option>
                                 </select>
                             </div>
 
-                            {/* FILTER HARGA */}
                             <div>
                                 <h3 className="font-black text-slate-800 mb-4">Rentang Harga</h3>
                                 <div className="flex items-center gap-2">
@@ -201,7 +210,6 @@ export default function Explore() {
                                 </div>
                             </div>
 
-                            {/* FILTER RATING PENJUAL */}
                             <div>
                                 <h3 className="font-black text-slate-800 mb-4">Rating Penjual</h3>
                                 <select value={ratingFilter} onChange={(e) => setRatingFilter(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:border-[#00478F] cursor-pointer appearance-none">
@@ -212,13 +220,12 @@ export default function Explore() {
                                 </select>
                             </div>
                             
-                            <button onClick={() => {setSearchTerm(''); setSelectedCategory(''); setPriceRange({min:'',max:''}); setSortBy('newest'); setCampusFilter('Semua Kampus'); setRatingFilter('0');}} className="w-full py-4 text-red-500 font-bold text-sm bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
+                            <button onClick={() => {setSearchTerm(''); setSelectedCategory(''); setPriceRange({min:'',max:''}); setSortBy('newest'); setCampusFilter('Semua Kampus'); setRatingFilter('0'); setSearchParams({});}} className="w-full py-4 text-red-500 font-bold text-sm bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
                                 Reset Semua Filter
                             </button>
                         </div>
                     </div>
 
-                    {/* FOOTER MOBILE (Tombol Terapkan - Hanya di HP) */}
                     <div className="md:hidden p-5 border-t border-slate-100 bg-white shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.02)] z-10">
                         <button onClick={() => setIsMobileFilterOpen(false)} className="w-full bg-[#00478F] text-white font-black py-4 rounded-2xl uppercase tracking-widest text-sm shadow-lg shadow-blue-900/20 active:scale-95 transition-transform">
                             Tampilkan Produk ({products.length})
@@ -226,7 +233,6 @@ export default function Explore() {
                     </div>
                 </aside>
 
-                {/* MAIN PRODUCT GRID */}
                 <div className="flex-1">
                     <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex items-center mb-8 sticky top-24 z-10">
                         <Search className="text-slate-400 ml-4 mr-2 shrink-0" size={20} />
@@ -251,7 +257,6 @@ export default function Explore() {
                     ) : (
                         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                             {products.map(product => {
-                                // 🌟 PENGECEKAN BARANG MILIK SENDIRI
                                 const isMyProduct = user && (product.sellerId?._id === user.id || product.sellerId === user.id);
 
                                 return (
@@ -261,7 +266,6 @@ export default function Explore() {
                                                 <span className="bg-white/90 backdrop-blur-md text-[#00478F] px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm">
                                                     {product.category?.name || product.category || 'Barang'}
                                                 </span>
-                                                {/* 🌟 HINT: BARANG MILIKMU 🌟 */}
                                                 {isMyProduct && (
                                                     <span className="bg-[#FF9500] text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm">
                                                         Milikmu
@@ -296,7 +300,7 @@ export default function Explore() {
                 </div>
             </div>
 
-            {/* ================= MODAL KAMPUS PAGINATION ================= */}
+            {/* MODAL KAMPUS */}
             {isCampusModalOpen && (
                 <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 border border-slate-100">
@@ -326,19 +330,7 @@ export default function Explore() {
                                     {campus}
                                 </button>
                             ))}
-                            {displayedCampuses.length === 0 && <p className="text-center text-slate-400 font-bold mt-10">Kampus tidak ditemukan.</p>}
                         </div>
-
-                        {/* Pagination Kampus */}
-                        {totalCampusPages > 1 && (
-                            <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Hal {campusPage} / {totalCampusPages}</span>
-                                <div className="flex gap-2">
-                                    <button onClick={() => setCampusPage(p => Math.max(1, p - 1))} disabled={campusPage === 1} className="p-2 bg-slate-100 border border-slate-200 rounded-lg disabled:opacity-50 hover:bg-slate-200"><ChevronLeft size={18}/></button>
-                                    <button onClick={() => setCampusPage(p => Math.min(totalCampusPages, p + 1))} disabled={campusPage === totalCampusPages} className="p-2 bg-slate-100 border border-slate-200 rounded-lg disabled:opacity-50 hover:bg-slate-200"><ChevronRight size={18}/></button>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
             )}
