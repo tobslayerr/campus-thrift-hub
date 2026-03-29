@@ -1,5 +1,4 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable no-unused-vars */
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../api/axios';
@@ -12,7 +11,7 @@ export default function Explore() {
     const initialSearch = searchParams.get('search') || '';
     const initialCampus = searchParams.get('campus') || ''; 
     const initialRating = searchParams.get('minRating') || '0';
-    const initialCategoryName = searchParams.get('category') || '';
+    const urlCategoryName = searchParams.get('category') || '';
     const initialSort = searchParams.get('sort') || 'newest';
     
     const { user } = useAuthStore(); 
@@ -22,7 +21,8 @@ export default function Explore() {
     const [loading, setLoading] = useState(true);
 
     const [searchTerm, setSearchTerm] = useState(initialSearch);
-    const [selectedCategory, setSelectedCategory] = useState('');
+    // PERBAIKAN UTAMA: State ini sekarang menyimpan NAMA kategori, bukan ID-nya
+    const [selectedCategory, setSelectedCategory] = useState(''); 
     const [priceRange, setPriceRange] = useState({ min: '', max: '' });
     const [sortBy, setSortBy] = useState(initialSort);
     const [campusFilter, setCampusFilter] = useState(initialCampus ? initialCampus : 'Semua Kampus');
@@ -47,32 +47,10 @@ export default function Explore() {
         fetchCampuses();
     }, []);
 
-    // FETCH PRODUK TRIGGER
-    useEffect(() => {
-        // MENCEGAH RACE CONDITION: Jangan fetch barang jika URL punya kategori tapi data ID kategori belum diset
-        if (initialCategoryName && !selectedCategory && categories.length === 0) {
-            return;
-        }
-        fetchProducts();
-    }, [searchTerm, selectedCategory, priceRange, sortBy, campusFilter, ratingFilter, categories.length]);
-
     const fetchCategories = async () => {
         try {
             const res = await api.get('/categories');
-            const fetchedCategories = res.data.data;
-            setCategories(fetchedCategories);
-
-            // LOGIKA PENCARIAN NAMA KATEGORI KE ID (CASE INSENSITIVE)
-            if (initialCategoryName) {
-                const matchedCategory = fetchedCategories.find(
-                    cat => cat.name.trim().toLowerCase() === initialCategoryName.trim().toLowerCase()
-                );
-                if (matchedCategory) {
-                    setSelectedCategory(matchedCategory._id);
-                } else {
-                    setSelectedCategory(''); // Reset jika kategori tak ditemukan
-                }
-            }
+            setCategories(res.data.data);
         } catch (error) { console.error(error); }
     };
 
@@ -83,12 +61,39 @@ export default function Explore() {
         } catch (error) { console.error(error); }
     };
 
+    // 1. SINKRONISASI KATEGORI URL <-> NAMA KATEGORI DI DATABASE
+    useEffect(() => {
+        if (categories.length > 0) {
+            if (urlCategoryName) {
+                const matched = categories.find(c => c.name.trim().toLowerCase() === urlCategoryName.trim().toLowerCase());
+                // Set berdasar NAMA, karena database backend menggunakan String Nama
+                setSelectedCategory(matched ? matched.name : '');
+            } else {
+                setSelectedCategory('');
+            }
+        }
+    }, [urlCategoryName, categories]);
+
+    // 2. FETCH PRODUK TRIGGER
+    useEffect(() => {
+        if (categories.length === 0) return;
+
+        const expectedCategoryName = urlCategoryName 
+            ? (categories.find(c => c.name.trim().toLowerCase() === urlCategoryName.trim().toLowerCase())?.name || '') 
+            : '';
+        
+        if (selectedCategory !== expectedCategoryName) return;
+
+        fetchProducts();
+    }, [searchTerm, selectedCategory, priceRange, sortBy, campusFilter, ratingFilter, categories, urlCategoryName]);
+
     const fetchProducts = async () => {
         setLoading(true);
         try {
             let query = `/products?status=Tersedia`;
             if (searchTerm) query += `&search=${searchTerm}`;
-            if (selectedCategory) query += `&category=${selectedCategory}`;
+            // Kirim filter NAMA Kategori ke Backend dan di-encode agar aman
+            if (selectedCategory) query += `&category=${encodeURIComponent(selectedCategory)}`;
             if (priceRange.min) query += `&minPrice=${priceRange.min}`;
             if (priceRange.max) query += `&maxPrice=${priceRange.max}`;
             
@@ -132,7 +137,6 @@ export default function Explore() {
     };
 
     const filteredCampuses = campuses.filter(c => c.toLowerCase().includes(campusSearch.toLowerCase()));
-    const totalCampusPages = Math.ceil(filteredCampuses.length / campusesPerPage);
     const displayedCampuses = filteredCampuses.slice((campusPage - 1) * campusesPerPage, campusPage * campusesPerPage);
 
     return (
@@ -178,12 +182,25 @@ export default function Explore() {
                                 <h3 className="font-black text-slate-800 mb-4">Kategori</h3>
                                 <div className="space-y-3">
                                     <label className="flex items-center gap-3 cursor-pointer group">
-                                        <input type="radio" name="category" checked={selectedCategory === ''} onChange={() => { setSelectedCategory(''); setSearchParams(prev => { prev.delete('category'); return prev; }); }} className="w-4 h-4 accent-[#00478F]" />
+                                        <input 
+                                            type="radio" 
+                                            name="category" 
+                                            checked={selectedCategory === ''} 
+                                            onChange={() => setSearchParams(prev => { prev.delete('category'); return prev; })} 
+                                            className="w-4 h-4 accent-[#00478F]" 
+                                        />
                                         <span className="font-medium text-slate-600 group-hover:text-[#00478F] transition-colors">Semua Kategori</span>
                                     </label>
                                     {categories.map(cat => (
                                         <label key={cat._id} className="flex items-center gap-3 cursor-pointer group">
-                                            <input type="radio" name="category" checked={selectedCategory === cat._id} onChange={() => { setSelectedCategory(cat._id); setSearchParams(prev => { prev.set('category', cat.name); return prev; }); }} className="w-4 h-4 accent-[#00478F]" />
+                                            <input 
+                                                type="radio" 
+                                                name="category" 
+                                                // Bandingkan dan Set berdasarkan NAMA Kategori
+                                                checked={selectedCategory === cat.name} 
+                                                onChange={() => setSearchParams(prev => { prev.set('category', cat.name); return prev; })} 
+                                                className="w-4 h-4 accent-[#00478F]" 
+                                            />
                                             <span className="font-medium text-slate-600 group-hover:text-[#00478F] transition-colors">{cat.name}</span>
                                         </label>
                                     ))}
@@ -220,7 +237,7 @@ export default function Explore() {
                                 </select>
                             </div>
                             
-                            <button onClick={() => {setSearchTerm(''); setSelectedCategory(''); setPriceRange({min:'',max:''}); setSortBy('newest'); setCampusFilter('Semua Kampus'); setRatingFilter('0'); setSearchParams({});}} className="w-full py-4 text-red-500 font-bold text-sm bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
+                            <button onClick={() => {setSearchTerm(''); setPriceRange({min:'',max:''}); setSortBy('newest'); setCampusFilter('Semua Kampus'); setRatingFilter('0'); setSearchParams({});}} className="w-full py-4 text-red-500 font-bold text-sm bg-red-50 rounded-xl hover:bg-red-100 transition-colors">
                                 Reset Semua Filter
                             </button>
                         </div>
